@@ -107,6 +107,36 @@ app.get('/api/access-codes', async (req, res) => {
   }
 });
 
+// Helper para serializar BigInts em JSON
+const safeJsonStringify = (obj) => {
+  return JSON.stringify(obj, (key, value) => {
+    // Converter BigInt para string
+    if (typeof value === 'bigint') {
+      return value.toString();
+    }
+    return value;
+  });
+};
+
+// Middleware para lidar com serialização segura de BigInt
+app.use((req, res, next) => {
+  const originalJson = res.json;
+  res.json = function(body) {
+    try {
+      return originalJson.call(this, body);
+    } catch (error) {
+      if (error.message && error.message.includes('bigint')) {
+        // Se houver erro de serialização de BigInt, usar nossa função segura
+        console.log('Convertendo BigInt para string na resposta');
+        this.send(safeJsonStringify(body));
+        return this;
+      }
+      throw error;
+    }
+  };
+  next();
+});
+
 // Rota para criar um novo código de acesso (para admin)
 app.post('/api/access-codes', async (req, res) => {
   try {
@@ -131,8 +161,8 @@ app.post('/api/access-codes', async (req, res) => {
       args: [code, userType, userName, isActive ? 1 : 0, Math.floor(Date.now() / 1000)]
     });
     
-    // Obter o ID do novo código inserido
-    const insertId = result.lastInsertRowid;
+    // Obter o ID do novo código inserido (convertendo BigInt para Number)
+    const insertId = Number(result.lastInsertRowid);
     
     // Retornar o código criado
     res.status(201).json({
@@ -340,6 +370,8 @@ app.post('/api/time-slots', async (req, res) => {
   try {
     const { date, startTime, endTime, embasaCodeId } = req.body;
     
+    console.log('Criando novo horário com dados:', req.body);
+    
     if (!date || !startTime || !embasaCodeId) {
       return res.status(400).json({ 
         message: 'date, startTime e embasaCodeId são obrigatórios' 
@@ -355,6 +387,7 @@ app.post('/api/time-slots', async (req, res) => {
     }
     
     // Inserir o novo horário
+    console.log('Executando consulta para inserir horário...');
     const result = await client.execute({
       sql: `
         INSERT INTO time_slots (date, start_time, end_time, is_available, embasa_code_id) 
@@ -363,8 +396,9 @@ app.post('/api/time-slots', async (req, res) => {
       args: [date, startTime, finalEndTime, embasaCodeId]
     });
     
-    // Obter o ID do novo horário inserido
-    const insertId = result.lastInsertRowid;
+    // Obter o ID do novo horário inserido (convertendo BigInt para Number para evitar erro de serialização)
+    const insertId = Number(result.lastInsertRowid);
+    console.log(`Horário criado com ID: ${insertId}, tipo: ${typeof insertId}`);
     
     // Retornar o horário criado
     res.status(201).json({
@@ -373,14 +407,15 @@ app.post('/api/time-slots', async (req, res) => {
       startTime,
       endTime: finalEndTime,
       isAvailable: true,
-      embasaCodeId
+      embasaCodeId: Number(embasaCodeId)
     });
   } catch (error) {
     console.error('Erro ao criar horário:', error);
     res.status(500).json({
       status: 'error',
       message: 'Falha ao criar horário',
-      error: String(error)
+      error: String(error),
+      stack: error.stack
     });
   }
 });
@@ -432,22 +467,22 @@ app.get('/api/appointments', async (req, res) => {
     
     // Mapear para o formato esperado pelo frontend
     const appointments = result.rows.map(row => ({
-      id: row.id,
+      id: Number(row.id),
       clientName: row.client_name,
       ssNumber: row.ss_number,
       comments: row.comments,
       timeSlot: {
-        id: row.time_slot_id,
+        id: Number(row.time_slot_id),
         date: row.date,
         startTime: row.start_time,
         endTime: row.end_time,
         embasa: {
-          id: row.embasa_code_id,
+          id: Number(row.embasa_code_id),
           userName: row.embasa_name
         }
       },
       sac: {
-        id: row.sac_code_id,
+        id: Number(row.sac_code_id),
         userName: row.sac_name
       }
     }));
@@ -490,17 +525,17 @@ app.get('/api/appointments/sac', async (req, res) => {
     
     // Mapear para o formato esperado pelo frontend
     const appointments = result.rows.map(row => ({
-      id: row.id,
+      id: Number(row.id),
       clientName: row.client_name,
       ssNumber: row.ss_number,
       comments: row.comments,
       timeSlot: {
-        id: row.time_slot_id,
+        id: Number(row.time_slot_id),
         date: row.date,
         startTime: row.start_time,
         endTime: row.end_time,
         embasa: {
-          id: row.embasa_code_id,
+          id: Number(row.embasa_code_id),
           userName: row.embasa_name
         }
       }
@@ -564,8 +599,8 @@ app.post('/api/appointments', async (req, res) => {
       // Confirmar a transação
       await client.execute('COMMIT');
       
-      // Obter o ID do novo agendamento inserido
-      const insertId = result.lastInsertRowid;
+      // Obter o ID do novo agendamento inserido (convertendo BigInt para Number)
+      const insertId = Number(result.lastInsertRowid);
       
       // Retornar o agendamento criado
       res.status(201).json({
@@ -573,8 +608,8 @@ app.post('/api/appointments', async (req, res) => {
         clientName,
         ssNumber,
         comments: comments || '',
-        timeSlotId,
-        sacCodeId
+        timeSlotId: Number(timeSlotId),
+        sacCodeId: Number(sacCodeId)
       });
     } catch (error) {
       // Em caso de erro, reverter a transação
@@ -586,7 +621,8 @@ app.post('/api/appointments', async (req, res) => {
     res.status(500).json({
       status: 'error',
       message: 'Falha ao criar agendamento',
-      error: String(error)
+      error: String(error),
+      stack: error.stack
     });
   }
 });

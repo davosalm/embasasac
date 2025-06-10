@@ -1,7 +1,6 @@
 import 'dotenv/config';
 import express from "express";
 import { registerRoutes } from "../../server/routes";
-import { serveStatic } from "../../server/vite";
 import serverless from 'serverless-http';
 
 // Configuração do Express
@@ -35,35 +34,42 @@ app.use((req, res, next) => {
   next();
 });
 
-// Configurando rotas e handlers de erros
+// Configurando rotas
 let serverlessHandler: any;
 
-const setupServer = async () => {
-  const server = await registerRoutes(app);
+// Configuração assíncrona
+const setup = async () => {
+  // Registrar as rotas da API
+  await registerRoutes(app);
   
+  // Tratamento de erros
   app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
     res.status(status).json({ message });
   });
   
-  // Em produção, servimos arquivos estáticos
-  serveStatic(app);
+  // Fallback para as rotas não encontradas
+  app.use('*', (_req, res) => {
+    res.status(404).json({ message: 'Not Found' });
+  });
   
-  // Converte o app Express em uma função serverless
+  // Criar o handler serverless
   serverlessHandler = serverless(app);
+  
+  return serverlessHandler;
 };
 
-// Inicializa o servidor
-setupServer();
+// Não executamos setup() aqui - vamos fazer isso durante a primeira requisição
+// para evitar problemas com o empacotamento do Netlify
 
-// Handler para Netlify Functions
+// Exportar o handler para o Netlify Functions
 export const handler = async (event: any, context: any) => {
-  // Espera pela inicialização se necessário
+  // Inicializa o servidor na primeira requisição
   if (!serverlessHandler) {
-    await setupServer();
+    serverlessHandler = await setup();
   }
   
-  // Retorna a resposta do handler do Express
+  // Processar a requisição com o serverless handler
   return serverlessHandler(event, context);
 };

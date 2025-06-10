@@ -41,7 +41,14 @@ app.get('/api/db-test', async (req, res) => {
 });
 
 // Rota de login - implementação simplificada
-app.post('/api/login', async (req, res) => {
+// Rota original
+app.post('/api/login', handleLogin);
+
+// Rota adicional para corresponder ao caminho que o frontend está usando
+app.post('/api/auth/login', handleLogin);
+
+// Função para lidar com o login
+async function handleLogin(req, res) {
   try {
     const { code } = req.body;
     
@@ -49,11 +56,15 @@ app.post('/api/login', async (req, res) => {
       return res.status(400).json({ message: 'Código de acesso obrigatório' });
     }
     
+    console.log(`Tentativa de login com código: ${code}`);
+    
     // Consulta o banco para verificar o código
     const result = await client.execute({
       sql: 'SELECT * FROM codes WHERE code = ?',
       args: [code]
     });
+    
+    console.log(`Resultado da consulta:`, result.rows);
     
     if (result.rows.length === 0) {
       return res.status(401).json({ message: 'Código de acesso inválido' });
@@ -69,7 +80,7 @@ app.post('/api/login', async (req, res) => {
     console.error('Erro ao processar login:', error);
     res.status(500).json({ message: 'Erro interno do servidor', error: String(error) });
   }
-});
+}
 
 // Tratamento de erros
 app.use((err, _req, res, _next) => {

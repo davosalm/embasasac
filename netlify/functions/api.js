@@ -188,15 +188,46 @@ app.delete('/api/access-codes/:id', async (req, res) => {
     const id = parseInt(req.params.id);
     
     // Verificar se o código existe
-    const checkResult = await client.execute("SELECT id FROM access_codes WHERE id = ?", [id]);
+    const checkResult = await client.execute("SELECT id, user_type FROM access_codes WHERE id = ?", [id]);
     if (checkResult.rows.length === 0) {
       return res.status(404).json({ message: 'Código não encontrado' });
     }
     
-    // Excluir o código
-    await client.execute("DELETE FROM access_codes WHERE id = ?", [id]);
+    const userType = checkResult.rows[0].user_type;
     
-    res.status(204).end(); // Sucesso sem conteúdo
+    // Iniciar uma transação
+    await client.execute('BEGIN TRANSACTION');
+    
+    try {
+      // Verificar e excluir registros dependentes baseado no tipo de usuário
+      if (userType === 'embasa') {
+        // 1. Buscar os horários vinculados a este código EMBASA
+        const timeSlots = await client.execute("SELECT id FROM time_slots WHERE embasa_code_id = ?", [id]);
+        
+        // 2. Para cada horário, excluir os agendamentos relacionados
+        for (const slot of timeSlots.rows) {
+          await client.execute("DELETE FROM appointments WHERE time_slot_id = ?", [slot.id]);
+        }
+        
+        // 3. Excluir todos os horários deste código EMBASA
+        await client.execute("DELETE FROM time_slots WHERE embasa_code_id = ?", [id]);
+      } else if (userType === 'sac') {
+        // Excluir agendamentos relacionados a este SAC
+        await client.execute("DELETE FROM appointments WHERE sac_code_id = ?", [id]);
+      }
+      
+      // Finalmente, excluir o código de acesso
+      await client.execute("DELETE FROM access_codes WHERE id = ?", [id]);
+      
+      // Confirmar a transação
+      await client.execute('COMMIT');
+      
+      res.status(204).end(); // Sucesso sem conteúdo
+    } catch (error) {
+      // Em caso de erro, reverter a transação
+      await client.execute('ROLLBACK');
+      throw error;
+    }
   } catch (error) {
     console.error('Erro ao excluir código de acesso:', error);
     res.status(500).json({
@@ -431,10 +462,25 @@ app.delete('/api/time-slots/:id', async (req, res) => {
       return res.status(404).json({ message: 'Horário não encontrado' });
     }
     
-    // Excluir o horário
-    await client.execute("DELETE FROM time_slots WHERE id = ?", [id]);
+    // Iniciar uma transação
+    await client.execute('BEGIN TRANSACTION');
     
-    res.status(204).end(); // Sucesso sem conteúdo
+    try {
+      // Primeiro, excluir qualquer agendamento relacionado a este horário
+      await client.execute("DELETE FROM appointments WHERE time_slot_id = ?", [id]);
+      
+      // Depois, excluir o horário
+      await client.execute("DELETE FROM time_slots WHERE id = ?", [id]);
+      
+      // Confirmar a transação
+      await client.execute('COMMIT');
+      
+      res.status(204).end(); // Sucesso sem conteúdo
+    } catch (error) {
+      // Em caso de erro, reverter a transação
+      await client.execute('ROLLBACK');
+      throw error;
+    }
   } catch (error) {
     console.error('Erro ao excluir horário:', error);
     res.status(500).json({

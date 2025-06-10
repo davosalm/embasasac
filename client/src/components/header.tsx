@@ -1,11 +1,24 @@
 import { Button } from "@/components/ui/button";
 import { useTheme } from "@/components/theme-provider";
 import { useAuth } from "@/lib/auth";
-import { Moon, Sun, LogOut, Calendar, User } from "lucide-react";
+import { Moon, Sun, LogOut, Calendar, User, RefreshCw } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useToast } from "@/hooks/use-toast";
 
 export function Header() {
   const { theme, setTheme } = useTheme();
   const { currentUser, logout } = useAuth();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  const handleRefresh = () => {
+    // Invalidate and refetch all queries
+    queryClient.invalidateQueries();
+    toast({
+      title: "Sistema atualizado",
+      description: "Todos os dados foram atualizados com sucesso"
+    });
+  };
 
   if (!currentUser) return null;
 
@@ -17,13 +30,23 @@ export function Header() {
             <div className="w-10 h-10 bg-primary rounded-lg flex items-center justify-center">
               <Calendar className="text-white h-5 w-5" />
             </div>
-            <div>
-              <h1 className="text-lg font-semibold text-gray-900 dark:text-white">
-                Sistema EMBASA
-              </h1>
-              <p className="text-sm text-gray-600 dark:text-gray-400">
-                {currentUser.userName}
-              </p>
+            <div className="flex items-center">
+              <div>
+                <h1 className="text-lg font-semibold text-gray-900 dark:text-white">
+                  Sistema EMBASA
+                </h1>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  {currentUser.userName}
+                </p>
+              </div>
+              <Button 
+                onClick={handleRefresh}
+                className="ml-4 bg-primary hover:bg-primary/90 text-white flex items-center space-x-2 px-4"
+                size="lg"
+              >
+                <RefreshCw className="h-5 w-5" />
+                <span>Atualizar Sistema</span>
+              </Button>
             </div>
           </div>
 

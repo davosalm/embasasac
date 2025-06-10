@@ -58,7 +58,7 @@ export function BookingModal({ open, onOpenChange, timeSlot }: BookingModalProps
       const response = await apiRequest("POST", "/api/appointments", {
         ...data,
         timeSlotId: timeSlot!.id,
-        sacCodeId: currentUser!.id,
+        sacId: currentUser!.id, // Esta é a correção: mudando de sacCodeId para sacId
       });
       return response.json();
     },

@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useState, useEffect } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -10,7 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Calendar, Clock, Building, CheckCircle } from "lucide-react";
+import { Calendar, Clock, Building, CheckCircle, RefreshCw } from "lucide-react";
 import { Header } from "@/components/header";
 import { BookingModal } from "@/components/modals/booking-modal";
 import { apiRequest } from "@/lib/queryClient";
@@ -23,12 +23,21 @@ export default function SacDashboard() {
   const [selectedTimeSlot, setSelectedTimeSlot] = useState<TimeSlotWithEmbasa | null>(null);
   const [filterEmbasa, setFilterEmbasa] = useState<string>("all");
   const { currentUser } = useAuth();
+  const queryClient = useQueryClient();
 
-  const { data: availableSlots = [] } = useQuery<TimeSlotWithEmbasa[]>({
+  const { 
+    data: availableSlots = [], 
+    isLoading: slotsLoading,
+    refetch: refetchSlots 
+  } = useQuery<TimeSlotWithEmbasa[]>({
     queryKey: ["/api/time-slots/available"],
   });
-
-  const { data: myAppointments = [] } = useQuery<AppointmentWithDetails[]>({
+  
+  const { 
+    data: myAppointments = [], 
+    isLoading: appointmentsLoading,
+    refetch: refetchAppointments 
+  } = useQuery<AppointmentWithDetails[]>({
     queryKey: [`/api/appointments/sac?sacId=${currentUser?.id}`],
     enabled: !!currentUser,
   });
@@ -36,6 +45,11 @@ export default function SacDashboard() {
   const handleBookSlot = (slot: TimeSlotWithEmbasa) => {
     setSelectedTimeSlot(slot);
     setBookingModalOpen(true);
+  };
+
+  const refreshData = () => {
+    refetchSlots();
+    refetchAppointments();
   };
 
   // Get unique EMBASA units for filtering
@@ -59,29 +73,46 @@ export default function SacDashboard() {
               Agendar Visita Técnica
             </h2>
             
-            <div className="flex items-center space-x-2">
-              <span className="text-sm text-gray-600 dark:text-gray-400">
-                Filtrar por:
-              </span>
-              <Select value={filterEmbasa} onValueChange={setFilterEmbasa}>
-                <SelectTrigger className="w-48">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos</SelectItem>
-                  {embasaUnits.map(unit => (
-                    <SelectItem key={unit} value={unit}>
-                      {unit}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="flex items-center space-x-4">
+              <Button
+                onClick={refreshData}
+                variant="outline"
+                className="flex items-center space-x-2"
+              >
+                <RefreshCw className="h-4 w-4" />
+                <span>Atualizar Horários</span>
+              </Button>
+              
+              <div className="flex items-center space-x-2">
+                <span className="text-sm text-gray-600 dark:text-gray-400">
+                  Filtrar por:
+                </span>
+                <Select value={filterEmbasa} onValueChange={setFilterEmbasa}>
+                  <SelectTrigger className="w-48">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos</SelectItem>
+                    {embasaUnits.map(unit => (
+                      <SelectItem key={unit} value={unit}>
+                        {unit}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </div>
 
           {/* Available Appointments */}
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {filteredSlots.length === 0 ? (
+            {slotsLoading ? (
+              <div className="col-span-full text-center py-12">
+                <div className="text-gray-500 dark:text-gray-400">
+                  Carregando horários disponíveis...
+                </div>
+              </div>
+            ) : filteredSlots.length === 0 ? (
               <div className="col-span-full text-center py-12">
                 <div className="text-gray-500 dark:text-gray-400">
                   Nenhum horário disponível no momento
@@ -138,11 +169,26 @@ export default function SacDashboard() {
 
           {/* My Bookings */}
           <Card>
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle>Meus Agendamentos</CardTitle>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={refreshData}
+                className="flex items-center space-x-1"
+              >
+                <RefreshCw className="h-4 w-4" />
+                <span>Atualizar</span>
+              </Button>
             </CardHeader>
             <CardContent>
-              {myAppointments.length === 0 ? (
+              {appointmentsLoading ? (
+                <div className="text-center py-8">
+                  <div className="text-gray-500 dark:text-gray-400">
+                    Carregando agendamentos...
+                  </div>
+                </div>
+              ) : myAppointments.length === 0 ? (
                 <div className="text-center py-8">
                   <div className="text-gray-500 dark:text-gray-400">
                     Você não possui agendamentos
@@ -184,7 +230,6 @@ export default function SacDashboard() {
           </Card>
         </div>
       </main>
-
       <BookingModal
         open={bookingModalOpen}
         onOpenChange={setBookingModalOpen}

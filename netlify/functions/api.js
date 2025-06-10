@@ -555,11 +555,13 @@ app.get('/api/appointments/sac', async (req, res) => {
 // Rota para criar um novo agendamento
 app.post('/api/appointments', async (req, res) => {
   try {
-    const { clientName, ssNumber, comments, timeSlotId, sacCodeId } = req.body;
+    // Aceita tanto sacId quanto sacCodeId para compatibilidade
+    const { clientName, ssNumber, comments, timeSlotId, sacId, sacCodeId } = req.body;
+    const finalSacId = sacId || sacCodeId; // Usa sacId se disponível, caso contrário usa sacCodeId
     
-    if (!clientName || !ssNumber || !timeSlotId || !sacCodeId) {
+    if (!clientName || !ssNumber || !timeSlotId || !finalSacId) {
       return res.status(400).json({ 
-        message: 'clientName, ssNumber, timeSlotId e sacCodeId são obrigatórios' 
+        message: 'clientName, ssNumber, timeSlotId e sacId são obrigatórios' 
       });
     }
     
@@ -593,7 +595,7 @@ app.post('/api/appointments', async (req, res) => {
           INSERT INTO appointments (client_name, ss_number, comments, time_slot_id, sac_code_id) 
           VALUES (?, ?, ?, ?, ?)
         `,
-        args: [clientName, ssNumber, comments || '', timeSlotId, sacCodeId]
+        args: [clientName, ssNumber, comments || '', timeSlotId, finalSacId]
       });
       
       // Confirmar a transação
@@ -609,7 +611,7 @@ app.post('/api/appointments', async (req, res) => {
         ssNumber,
         comments: comments || '',
         timeSlotId: Number(timeSlotId),
-        sacCodeId: Number(sacCodeId)
+        sacCodeId: Number(finalSacId)
       });
     } catch (error) {
       // Em caso de erro, reverter a transação

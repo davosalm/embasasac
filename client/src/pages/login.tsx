@@ -11,27 +11,61 @@ import { useAuth } from "@/lib/auth";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
+// Adaptador para converter resposta da API em formato compatível com o frontend
+const adaptUserData = (apiResponse: any) => {
+  if (!apiResponse) return null;
+
+  // Se a API retornar o usuário dentro de data, usamos ele
+  const userData = apiResponse.data || apiResponse;
+  
+  // Adaptamos o campo 'type' para 'userType' se necessário
+  return {
+    ...userData,
+    userType: userData.userType || userData.type || "sac", // Fallback para sac
+    userName: userData.userName || userData.name || "Usuário", // Fallback para nome genérico
+  };
+};
+
 export default function Login() {
   const [accessCode, setAccessCode] = useState("");
   const [, setLocation] = useLocation();
   const { theme, setTheme } = useTheme();
   const { login } = useAuth();
   const { toast } = useToast();
-
+  
   const loginMutation = useMutation({
     mutationFn: async (code: string) => {
       const response = await apiRequest("POST", "/api/auth/login", { code });
       return response.json();
     },
-    onSuccess: (user) => {
-      login(user);
+    onSuccess: (response) => {
+      console.log("Resposta da API:", response); // Para debug
+      
+      // Adaptar os dados da resposta para o formato esperado pela aplicação
+      const adaptedUser = adaptUserData(response);
+      
+      if (!adaptedUser) {
+        toast({
+          title: "Erro no login",
+          description: "Falha ao processar dados do usuário",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      // Login com os dados adaptados
+      login(adaptedUser);
+      
       toast({
         title: "Login realizado com sucesso",
-        description: `Bem-vindo, ${user.userName}!`,
+        description: `Bem-vindo, ${adaptedUser.userName || 'Usuário'}!`,
       });
       
       // Redirect based on user type
-      switch (user.userType) {
+      const userType = adaptedUser.userType || "sac";
+      console.log("Redirecionando para:", userType); // Para debug
+      
+      switch (userType) {
         case "admin":
           setLocation("/admin");
           break;
@@ -39,13 +73,13 @@ export default function Login() {
           setLocation("/embasa");
           break;
         case "sac":
+        default:
           setLocation("/sac");
           break;
-        default:
-          setLocation("/");
       }
     },
     onError: (error: any) => {
+      console.error("Erro no login:", error); // Para debug
       toast({
         title: "Erro no login",
         description: error.message || "Código inválido",
@@ -53,7 +87,7 @@ export default function Login() {
       });
     },
   });
-
+  
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!accessCode.trim()) {
@@ -66,7 +100,7 @@ export default function Login() {
     }
     loginMutation.mutate(accessCode);
   };
-
+  
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-gray-50 dark:bg-gray-900">
       <Card className="w-full max-w-md">
@@ -83,7 +117,6 @@ export default function Login() {
             </p>
           </div>
         </CardHeader>
-
         <CardContent className="space-y-6">
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="space-y-2">
@@ -99,7 +132,6 @@ export default function Login() {
                 className="w-full"
               />
             </div>
-
             <Button
               type="submit"
               className="w-full"
@@ -108,7 +140,6 @@ export default function Login() {
               {loginMutation.isPending ? "Acessando..." : "Acessar Sistema"}
             </Button>
           </form>
-
           <div className="flex items-center justify-center pt-6 border-t border-gray-200 dark:border-gray-700">
             <Button
               variant="ghost"

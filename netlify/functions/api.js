@@ -55,11 +55,11 @@ app.get('/api/db-test', async (req, res) => {
   }
 });
 
-// Rota para verificar a estrutura da tabela codes
+// Rota para verificar a estrutura da tabela access_codes
 app.get('/api/db-schema', async (req, res) => {
   try {
-    console.log('Verificando esquema da tabela codes...');
-    const result = await client.execute("PRAGMA table_info('codes')");
+    console.log('Verificando esquema da tabela access_codes...');
+    const result = await client.execute("PRAGMA table_info('access_codes')");
     console.log('Estrutura da tabela:', result.rows);
     res.json({
       status: 'ok',
@@ -95,33 +95,23 @@ async function handleLogin(req, res) {
     
     // Primeiro, verificamos se a tabela existe
     try {
-      const tableCheck = await client.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='codes'");
-      console.log('Verificando existência da tabela codes:', tableCheck.rows);
+      const tableCheck = await client.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='access_codes'");
+      console.log('Verificando existência da tabela access_codes:', tableCheck.rows);
       
       if (tableCheck.rows.length === 0) {
-        console.log('A tabela codes não existe. Criando tabela...');
-        
-        // Se a tabela não existir, vamos criá-la para teste
-        await client.execute(`
-          CREATE TABLE IF NOT EXISTS codes (
-            id TEXT PRIMARY KEY,
-            code TEXT NOT NULL,
-            type TEXT NOT NULL,
-            name TEXT,
-            active INTEGER DEFAULT 1
-          )
-        `);
-        
-        console.log('Tabela codes criada com sucesso.');
+        console.log('A tabela access_codes não existe. Isso pode ser um problema de configuração do banco.');
+        return res.status(500).json({ 
+          message: 'Erro de configuração do banco de dados: tabela access_codes não existe'
+        });
       }
     } catch (error) {
-      console.error('Erro ao verificar ou criar a tabela codes:', error);
+      console.error('Erro ao verificar a tabela access_codes:', error);
     }
     
     // Consulta o banco para verificar o código
     console.log('Executando consulta para verificar o código...');
     const result = await client.execute({
-      sql: 'SELECT * FROM codes WHERE code = ?',
+      sql: 'SELECT * FROM access_codes WHERE code = ?',
       args: [code]
     });
     
@@ -132,12 +122,24 @@ async function handleLogin(req, res) {
       return res.status(401).json({ message: 'Código de acesso inválido' });
     }
     
-    // Retorna os dados do código encontrado
+    // Adaptar os dados do usuário para um formato mais amigável ao frontend
+    const user = result.rows[0];
+    const adaptedUser = {
+      ...user,
+      // Garantir que os campos necessários estejam presentes
+      userType: user.type || 'sac',
+      userName: user.name || 'Usuário',
+      // Manter os campos originais para compatibilidade
+      type: user.type,
+      name: user.name
+    };
+    
+    // Retorna os dados do código encontrado (adaptados para o frontend)
     console.log(`Login bem-sucedido para o código: ${code}`);
     return res.json({ 
       status: 'success', 
       message: 'Login realizado com sucesso',
-      data: result.rows[0]
+      data: adaptedUser
     });
   } catch (error) {
     console.error('Erro ao processar login:', error);

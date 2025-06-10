@@ -76,6 +76,27 @@ app.get('/api/db-schema', async (req, res) => {
   }
 });
 
+// Rota para listar todos os códigos de acesso (para debug)
+app.get('/api/access-codes', async (req, res) => {
+  try {
+    console.log('Listando todos os códigos de acesso...');
+    const result = await client.execute("SELECT * FROM access_codes");
+    console.log('Códigos encontrados:', result.rows);
+    res.json({
+      status: 'ok',
+      message: 'Códigos de acesso listados com sucesso',
+      data: result.rows
+    });
+  } catch (error) {
+    console.error('Erro ao listar códigos de acesso:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Falha ao listar códigos de acesso',
+      error: String(error)
+    });
+  }
+});
+
 // Rota de login - implementação simplificada
 app.post('/api/login', handleLogin);
 app.post('/api/auth/login', handleLogin);
@@ -93,7 +114,7 @@ async function handleLogin(req, res) {
     
     console.log(`Tentativa de login com código: ${code}`);
     
-    // Primeiro, verificamos se a tabela existe
+    // Verificar se a tabela existe
     try {
       const tableCheck = await client.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='access_codes'");
       console.log('Verificando existência da tabela access_codes:', tableCheck.rows);
@@ -122,25 +143,29 @@ async function handleLogin(req, res) {
       return res.status(401).json({ message: 'Código de acesso inválido' });
     }
     
-    // Adaptar os dados do usuário para um formato mais amigável ao frontend
+    // Obter o usuário da resposta
     const user = result.rows[0];
+    console.log(`Usuário encontrado:`, user);
+    
+    // Garantir que estamos usando o tipo correto
+    // Verificar se o objeto tem uma propriedade type
+    if (!('type' in user) && !('userType' in user)) {
+      console.error('ERRO: O objeto de usuário não tem um campo type ou userType:', user);
+    }
+    
+    // Adaptar os dados para o formato esperado pelo frontend
+    // Preservando explicitamente o tipo do usuário
     const adaptedUser = {
       ...user,
-      // Garantir que os campos necessários estejam presentes
-      userType: user.type || 'sac',
-      userName: user.name || 'Usuário',
-      // Manter os campos originais para compatibilidade
-      type: user.type,
-      name: user.name
+      code: code, // Garantir que o código esteja presente
+      userType: user.type || user.userType || 'sac', // Usar o tipo original se disponível
     };
     
-    // Retorna os dados do código encontrado (adaptados para o frontend)
-    console.log(`Login bem-sucedido para o código: ${code}`);
-    return res.json({ 
-      status: 'success', 
-      message: 'Login realizado com sucesso',
-      data: adaptedUser
-    });
+    console.log(`Usuário adaptado:`, adaptedUser);
+    
+    // Retorna os dados do código encontrado (com tipo de usuário explícito)
+    console.log(`Login bem-sucedido para o código: ${code}, tipo: ${adaptedUser.userType}`);
+    return res.json(adaptedUser);
   } catch (error) {
     console.error('Erro ao processar login:', error);
     res.status(500).json({ 

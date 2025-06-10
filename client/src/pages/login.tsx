@@ -15,14 +15,20 @@ import { useToast } from "@/hooks/use-toast";
 const adaptUserData = (apiResponse: any) => {
   if (!apiResponse) return null;
 
-  // Se a API retornar o usuário dentro de data, usamos ele
+  // Obter dados do usuário, verificando se estão dentro de um objeto data
   const userData = apiResponse.data || apiResponse;
-  
-  // Adaptamos o campo 'type' para 'userType' se necessário
+  console.log("Dados brutos do usuário:", userData); // Debug
+
+  // Se o tipo é undefined, null ou vazio, use um fallback
+  // Caso contrário, mantenha o tipo original
+  const userType = userData.userType || userData.type || "sac";
+  console.log("Tipo de usuário detectado:", userType); // Debug
+
   return {
     ...userData,
-    userType: userData.userType || userData.type || "sac", // Fallback para sac
-    userName: userData.userName || userData.name || "Usuário", // Fallback para nome genérico
+    // Garantir que userType seja mantido e tenha prioridade sobre type
+    userType: userType,
+    userName: userData.userName || userData.name || "Usuário",
   };
 };
 
@@ -39,7 +45,7 @@ export default function Login() {
       return response.json();
     },
     onSuccess: (response) => {
-      console.log("Resposta da API:", response); // Para debug
+      console.log("Resposta da API:", response);
       
       // Adaptar os dados da resposta para o formato esperado pela aplicação
       const adaptedUser = adaptUserData(response);
@@ -62,24 +68,30 @@ export default function Login() {
       });
       
       // Redirect based on user type
-      const userType = adaptedUser.userType || "sac";
-      console.log("Redirecionando para:", userType); // Para debug
+      const userType = adaptedUser.userType;
+      console.log("Tipo de usuário para redirecionamento:", userType);
       
       switch (userType) {
         case "admin":
+          console.log("Redirecionando para admin dashboard");
           setLocation("/admin");
           break;
         case "embasa":
+          console.log("Redirecionando para embasa dashboard");
           setLocation("/embasa");
           break;
         case "sac":
+          console.log("Redirecionando para sac dashboard");
+          setLocation("/sac");
+          break;
         default:
+          console.log("Tipo desconhecido, redirecionando para sac dashboard");
           setLocation("/sac");
           break;
       }
     },
     onError: (error: any) => {
-      console.error("Erro no login:", error); // Para debug
+      console.error("Erro no login:", error);
       toast({
         title: "Erro no login",
         description: error.message || "Código inválido",

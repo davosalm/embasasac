@@ -15,20 +15,24 @@ import { useToast } from "@/hooks/use-toast";
 const adaptUserData = (apiResponse: any) => {
   if (!apiResponse) return null;
 
-  // Obter dados do usuário, verificando se estão dentro de um objeto data
-  const userData = apiResponse.data || apiResponse;
-  console.log("Dados brutos do usuário:", userData); // Debug
+  // Obter dados do usuário da API
+  console.log("Resposta original da API:", apiResponse);
 
-  // Se o tipo é undefined, null ou vazio, use um fallback
-  // Caso contrário, mantenha o tipo original
-  const userType = userData.userType || userData.type || "sac";
-  console.log("Tipo de usuário detectado:", userType); // Debug
+  // Obter dados brutos do usuário
+  const userData = apiResponse;
+  console.log("Dados brutos do usuário:", userData);
+
+  // IMPORTANTE: Priorizar user_type que é o campo real no banco de dados
+  // Isso garante que o tipo de usuário não seja sobrescrito
+  const userType = userData.user_type || userData.userType || "sac";
+  console.log("Tipo de usuário extraído:", userType);
 
   return {
     ...userData,
-    // Garantir que userType seja mantido e tenha prioridade sobre type
+    // Garantir que userType reflita o tipo real do usuário
     userType: userType,
-    userName: userData.userName || userData.name || "Usuário",
+    // Garantir que userName use o campo correto do banco
+    userName: userData.user_name || userData.userName || "Usuário",
   };
 };
 
@@ -59,6 +63,8 @@ export default function Login() {
         return;
       }
       
+      console.log("Usuário adaptado final:", adaptedUser);
+      
       // Login com os dados adaptados
       login(adaptedUser);
       
@@ -67,7 +73,7 @@ export default function Login() {
         description: `Bem-vindo, ${adaptedUser.userName || 'Usuário'}!`,
       });
       
-      // Redirect based on user type
+      // Redirect based on user type - agora usando o tipo correto
       const userType = adaptedUser.userType;
       console.log("Tipo de usuário para redirecionamento:", userType);
       

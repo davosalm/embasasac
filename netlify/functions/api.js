@@ -147,23 +147,27 @@ async function handleLogin(req, res) {
     const user = result.rows[0];
     console.log(`Usuário encontrado:`, user);
     
-    // Garantir que estamos usando o tipo correto
-    // Verificar se o objeto tem uma propriedade type
-    if (!('type' in user) && !('userType' in user)) {
-      console.error('ERRO: O objeto de usuário não tem um campo type ou userType:', user);
+    // IMPORTANTE: Verificar o campo user_type que é o campo real no banco de dados
+    if (!user.user_type) {
+      console.error('ERRO: O objeto de usuário não tem um campo user_type:', user);
+      return res.status(500).json({ message: 'Erro de configuração do usuário no banco de dados' });
     }
     
     // Adaptar os dados para o formato esperado pelo frontend
-    // Preservando explicitamente o tipo do usuário
+    // Mantendo EXATAMENTE o valor de user_type como o valor de userType
     const adaptedUser = {
       ...user,
-      code: code, // Garantir que o código esteja presente
-      userType: user.type || user.userType || 'sac', // Usar o tipo original se disponível
+      code: code,  // Garantir que o código esteja presente
+      userType: user.user_type,  // Usar SEMPRE o user_type e não outros campos
+      userName: user.user_name   // Usar o user_name original do banco
     };
     
-    console.log(`Usuário adaptado:`, adaptedUser);
+    // Remover campos que possam causar conflito
+    delete adaptedUser.type; // Garantir que não há campo type
     
-    // Retorna os dados do código encontrado (com tipo de usuário explícito)
+    console.log(`Usuário adaptado para o frontend:`, adaptedUser);
+    
+    // Retorna os dados do código encontrado
     console.log(`Login bem-sucedido para o código: ${code}, tipo: ${adaptedUser.userType}`);
     return res.json(adaptedUser);
   } catch (error) {

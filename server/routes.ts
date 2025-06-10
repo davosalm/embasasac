@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
+import { authenticate, authorize } from "./middlewares";
 import { insertAccessCodeSchema, insertTimeSlotSchema, insertAppointmentSchema } from "@shared/schema";
 import { z } from "zod";
 
@@ -12,12 +13,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!code) {
         return res.status(400).json({ message: "Código é obrigatório" });
       }
-
       const accessCode = await storage.getAccessCodeByCode(code);
       if (!accessCode) {
         return res.status(401).json({ message: "Código inválido" });
       }
-
       res.json(accessCode);
     } catch (error) {
       res.status(500).json({ message: "Erro interno do servidor" });
@@ -25,7 +24,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Access Codes Management (Admin only)
-  app.get("/api/access-codes", async (req, res) => {
+  app.get("/api/access-codes", authenticate, authorize(['admin']), async (req, res) => {
     try {
       const codes = await storage.getAllAccessCodes();
       res.json(codes);
@@ -34,7 +33,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/access-codes", async (req, res) => {
+  app.post("/api/access-codes", authenticate, authorize(['admin']), async (req, res) => {
     try {
       const validatedData = insertAccessCodeSchema.parse(req.body);
       
@@ -58,7 +57,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/access-codes/:id", async (req, res) => {
+  app.delete("/api/access-codes/:id", authenticate, authorize(['admin']), async (req, res) => {
     try {
       const id = parseInt(req.params.id);
       await storage.deleteAccessCode(id);
@@ -69,7 +68,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Time Slots Management (EMBASA users)
-  app.get("/api/time-slots/available", async (req, res) => {
+  // This route is accessible to both SAC and EMBASA users for different purposes
+  app.get("/api/time-slots/available", authenticate, authorize(['sac', 'embasa', 'admin']), async (req, res) => {
     try {
       const timeSlots = await storage.getAvailableTimeSlots();
       res.json(timeSlots);
@@ -79,12 +79,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get time slots for current EMBASA user (without ID parameter)
-  app.get("/api/time-slots/embasa", async (req, res) => {
+  app.get("/api/time-slots/embasa", authenticate, authorize(['embasa', 'admin']), async (req, res) => {
     try {
-      const embasaId = parseInt(req.query.embasaId as string);
-      if (!embasaId) {
-        return res.status(400).json({ message: "ID do usuário EMBASA é obrigatório" });
+      // If admin is accessing, they should provide an embasaId
+      // If embasa user is accessing, use their own ID
+      let embasaId: number;
+      if (req.user.type === 'admin') {
+        embasaId = parseInt(req.query.embasaId as string);
+        if (!embasaId) {
+          return res.status(400).json({ message: "ID do usuário EMBASA é obrigatório para admin" });
+        }
+      } else {
+        embasaId = req.user.id;
       }
+      
       const timeSlots = await storage.getTimeSlotsByEmbasaId(embasaId);
       res.json(timeSlots);
     } catch (error) {
@@ -92,8 +100,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/time-slots/embasa/:embasaId", async (req, res) => {
+  app.get("/api/time-slots/embasa/:embasaId", authenticate, authorize(['embasa', 'admin']), async (req, res) => {
     try {
+      // Check if the user is an embasa user and only allow them to access their own slots
+      if (req.user.type === 'embasa' && req.user.id !== parseInt(req.params.embasaId)) {
+        return res.status(403).json({ message: "Acesso não autorizado a slots de outra unidade EMBASA" });
+      }
+      
       const embasaId = parseInt(req.params.embasaId);
       const timeSlots = await storage.getTimeSlotsByEmbasaId(embasaId);
       res.json(timeSlots);
@@ -102,9 +115,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/time-slots", async (req, res) => {
+  app.post("/api/time-slots", authenticate, authorize(['embasa']), async (req, res) => {
     try {
-      const { date, startTime, embasaCodeId } = req.body;
+      const { date, startTime } = req.body;
+      
+      // Use the current embasa user's ID directly
+      const embasaCodeId = req.user.id;
       
       // Calculate end time (2 hours later)
       const [hours, minutes] = startTime.split(':').map(Number);
@@ -129,9 +145,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/time-slots/:id", async (req, res) => {
+  app.delete("/api/time-slots/:id", authenticate, authorize(['embasa']), async (req, res) => {
     try {
       const id = parseInt(req.params.id);
+      
+      // Make sure embasa user can only delete their own time slots
+      const timeSlot = await storage.getTimeSlotById(id);
+      if (!timeSlot) {
+        return res.status(404).json({ message: "Horário não encontrado" });
+      }
+      
+      if (timeSlot.embasaCodeId !== req.user.id) {
+        return res.status(403).json({ message: "Não autorizado a excluir horários de outra unidade EMBASA" });
+      }
+      
       await storage.deleteTimeSlot(id);
       res.status(204).send();
     } catch (error) {
@@ -140,12 +167,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Appointments (SAC users)
-  app.get("/api/appointments/sac", async (req, res) => {
+  app.get("/api/appointments/sac", authenticate, authorize(['sac', 'admin']), async (req, res) => {
     try {
-      const sacId = parseInt(req.query.sacId as string);
-      if (!sacId) {
-        return res.status(400).json({ message: "ID do usuário SAC é obrigatório" });
+      // If admin is accessing, they should provide a sacId
+      // If sac user is accessing, use their own ID
+      let sacId: number;
+      if (req.user.type === 'admin') {
+        sacId = parseInt(req.query.sacId as string);
+        if (!sacId) {
+          return res.status(400).json({ message: "ID do usuário SAC é obrigatório para admin" });
+        }
+      } else {
+        sacId = req.user.id;
       }
+      
       const appointments = await storage.getAppointmentsBySacId(sacId);
       res.json(appointments);
     } catch (error) {
@@ -153,8 +188,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/appointments/sac/:sacId", async (req, res) => {
+  app.get("/api/appointments/sac/:sacId", authenticate, authorize(['sac', 'admin']), async (req, res) => {
     try {
+      // Check if the user is a sac user and only allow them to access their own appointments
+      if (req.user.type === 'sac' && req.user.id !== parseInt(req.params.sacId)) {
+        return res.status(403).json({ message: "Acesso não autorizado a agendamentos de outro SAC" });
+      }
+      
       const sacId = parseInt(req.params.sacId);
       const appointments = await storage.getAppointmentsBySacId(sacId);
       res.json(appointments);
@@ -163,18 +203,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/appointments", async (req, res) => {
+  app.get("/api/appointments", authenticate, authorize(['embasa', 'admin']), async (req, res) => {
     try {
       const appointments = await storage.getAllAppointments();
+      
+      // Filter appointments if user is embasa (they should only see appointments for their unit)
+      if (req.user.type === 'embasa') {
+        const embasaId = req.user.id;
+        const filteredAppointments = appointments.filter(
+          appointment => appointment.timeSlot.embasaCodeId === embasaId
+        );
+        return res.json(filteredAppointments);
+      }
+      
+      // Admin can see all appointments
       res.json(appointments);
     } catch (error) {
       res.status(500).json({ message: "Erro interno do servidor" });
     }
   });
 
-  app.post("/api/appointments", async (req, res) => {
+  app.post("/api/appointments", authenticate, authorize(['sac']), async (req, res) => {
     try {
-      const validatedData = insertAppointmentSchema.parse(req.body);
+      // Use the current SAC user's ID
+      const sacCodeId = req.user.id;
+      
+      const validatedData = insertAppointmentSchema.parse({
+        ...req.body,
+        sacCodeId
+      });
       
       // Check if time slot is still available
       const timeSlot = await storage.getTimeSlotById(validatedData.timeSlotId);

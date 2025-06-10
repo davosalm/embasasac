@@ -10,7 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Clock, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
+import { Plus, Clock, Trash2, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
 import { Header } from "@/components/header";
 import { CreateSlotModal } from "@/components/modals/create-slot-modal";
 import { apiRequest } from "@/lib/queryClient";
@@ -23,16 +23,17 @@ export default function EmbasaDashboard() {
   const [createSlotModalOpen, setCreateSlotModalOpen] = useState(false);
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [filterSac, setFilterSac] = useState<string>("all");
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const { toast } = useToast();
   const { currentUser } = useAuth();
   const queryClient = useQueryClient();
 
-  const { data: timeSlots = [], isLoading } = useQuery<TimeSlot[]>({
+  const { data: timeSlots = [], isLoading, refetch: refetchTimeSlots } = useQuery<TimeSlot[]>({
     queryKey: [`/api/time-slots/embasa?embasaId=${currentUser?.id}`],
     enabled: !!currentUser,
   });
 
-  const { data: allAppointments = [] } = useQuery<AppointmentWithDetails[]>({
+  const { data: allAppointments = [], refetch: refetchAppointments } = useQuery<AppointmentWithDetails[]>({
     queryKey: ["/api/appointments"],
   });
 
@@ -86,10 +87,15 @@ export default function EmbasaDashboard() {
     for (let day = 1; day <= daysInMonth; day++) {
       const dateStr = `${year}-${(month + 1).toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
       const slotsForDay = timeSlots.filter(slot => slot.date === dateStr);
-      days.push({ day, dateStr, slots: slotsForDay });
+      const appointmentsForDay = allAppointments.filter(apt => apt.timeSlot.date === dateStr && apt.timeSlot.embasa.id === currentUser?.id);
+      days.push({ day, dateStr, slots: slotsForDay, appointments: appointmentsForDay });
     }
     
     return days;
+  };
+
+  const handleDateClick = (dateStr: string) => {
+    setSelectedDate(dateStr === selectedDate ? null : dateStr);
   };
 
   const weekDays = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
@@ -204,7 +210,10 @@ export default function EmbasaDashboard() {
                       dayData ? 'hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer' : ''
                     } ${
                       dayData?.slots.length ? 'bg-primary-50 dark:bg-primary-900' : ''
+                    } ${
+                      dayData && selectedDate === dayData.dateStr ? 'ring-2 ring-primary-500' : ''
                     }`}
+                    onClick={() => dayData && handleDateClick(dayData.dateStr)}
                   >
                     {dayData && (
                       <>
@@ -216,18 +225,107 @@ export default function EmbasaDashboard() {
                             {dayData.slots.length} {dayData.slots.length === 1 ? 'slot' : 'slots'}
                           </div>
                         )}
+                        {dayData.appointments.length > 0 && (
+                          <div className="text-xs text-green-600 dark:text-green-400 mt-1">
+                            {dayData.appointments.length} {dayData.appointments.length === 1 ? 'agendamento' : 'agendamentos'}
+                          </div>
+                        )}
                       </>
                     )}
                   </div>
                 ))}
               </div>
+
+              {/* Detalhes do dia selecionado */}
+              {selectedDate && (
+                <div className="mt-6 border-t border-gray-200 dark:border-gray-700 pt-4">
+                  <h4 className="font-medium text-sm mb-2 text-gray-900 dark:text-white">
+                    Detalhes de {formatDate(selectedDate)}
+                  </h4>
+                  
+                  {/* Horários disponibilizados nesta data */}
+                  {timeSlots.filter(slot => slot.date === selectedDate).length > 0 ? (
+                    <div className="mb-4">
+                      <h5 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        Horários disponibilizados:
+                      </h5>
+                      <div className="space-y-2">
+                        {timeSlots.filter(slot => slot.date === selectedDate).map(slot => (
+                          <div 
+                            key={slot.id} 
+                            className="text-sm p-2 bg-gray-50 dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700 flex justify-between items-center"
+                          >
+                            <div>
+                              <span className="font-medium">{formatTimeRange(slot.startTime, slot.endTime)}</span>
+                              <span className="ml-2 text-gray-600 dark:text-gray-400">
+                                {slot.isAvailable ? 'Disponível' : 'Ocupado'}
+                              </span>
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleDeleteSlot(slot.id)}
+                              className="text-red-600 hover:text-red-900 dark:text-red-400"
+                              disabled={!slot.isAvailable}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                      Não há horários disponibilizados para esta data.
+                    </p>
+                  )}
+                  
+                  {/* Agendamentos nesta data */}
+                  <h5 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Agendamentos:
+                  </h5>
+                  {allAppointments.filter(apt => apt.timeSlot.date === selectedDate).length === 0 ? (
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      Não há agendamentos para esta data.
+                    </p>
+                  ) : (
+                    <div className="space-y-2">
+                      {allAppointments.filter(apt => apt.timeSlot.date === selectedDate).map(apt => (
+                        <div 
+                          key={apt.id} 
+                          className="text-sm p-2 bg-gray-50 dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700"
+                        >
+                          <div className="font-medium">{apt.clientName} - SS: {apt.ssNumber}</div>
+                          <div className="text-gray-600 dark:text-gray-400">
+                            {formatTimeRange(apt.timeSlot.startTime, apt.timeSlot.endTime)} • SAC: {apt.sac.userName}
+                          </div>
+                          {apt.comments && (
+                            <div className="text-gray-500 mt-1">
+                              <span className="font-medium">Comentário:</span> {apt.comments}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </CardContent>
           </Card>
 
           {/* Available Slots List */}
           <Card>
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle>Horários Disponibilizados</CardTitle>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => refetchTimeSlots()}
+                className="flex items-center space-x-1"
+              >
+                <RefreshCw className="h-4 w-4" />
+                <span>Atualizar horários</span>
+              </Button>
             </CardHeader>
             <CardContent>
               {isLoading ? (

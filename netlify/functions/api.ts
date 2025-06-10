@@ -36,7 +36,7 @@ app.use((req, res, next) => {
 });
 
 // Configurando rotas e handlers de erros
-let handler: any;
+let serverlessHandler: any;
 
 const setupServer = async () => {
   const server = await registerRoutes(app);
@@ -51,7 +51,7 @@ const setupServer = async () => {
   serveStatic(app);
   
   // Converte o app Express em uma função serverless
-  handler = serverless(app);
+  serverlessHandler = serverless(app);
 };
 
 // Inicializa o servidor
@@ -60,10 +60,10 @@ setupServer();
 // Handler para Netlify Functions
 export const handler = async (event: any, context: any) => {
   // Espera pela inicialização se necessário
-  if (!handler) {
+  if (!serverlessHandler) {
     await setupServer();
   }
   
   // Retorna a resposta do handler do Express
-  return handler(event, context);
+  return serverlessHandler(event, context);
 };

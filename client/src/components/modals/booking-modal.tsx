@@ -58,20 +58,28 @@ export function BookingModal({ open, onOpenChange, timeSlot }: BookingModalProps
       const response = await apiRequest("POST", "/api/appointments", {
         ...data,
         timeSlotId: timeSlot!.id,
-        sacId: currentUser!.id, // Esta é a correção: mudando de sacCodeId para sacId
+        sacId: currentUser!.id,
       });
-      return response.json();
+
+      // Verificar se a resposta foi bem-sucedida antes de processar o JSON
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Erro ao realizar agendamento");
+      }
+
+      // Se chegou até aqui, a resposta foi bem-sucedida
+      return response.status === 204 ? null : await response.json();
     },
     onSuccess: () => {
       toast({
         title: "Agendamento realizado com sucesso",
         description: "Sua visita técnica foi agendada",
       });
-      queryClient.invalidateQueries({ 
-        queryKey: ["/api/time-slots/available"] 
+      queryClient.invalidateQueries({
+        queryKey: ["/api/time-slots/available"],
       });
-      queryClient.invalidateQueries({ 
-        queryKey: ["/api/appointments/sac", currentUser!.id] 
+      queryClient.invalidateQueries({
+        queryKey: ["/api/appointments/sac", currentUser!.id],
       });
       form.reset();
       onOpenChange(false);

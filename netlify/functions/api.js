@@ -613,7 +613,12 @@ app.post('/api/appointments', async (req, res) => {
     
     // Verificar se o horário está disponível
     const checkSlotResult = await client.execute({
-      sql: 'SELECT is_available FROM time_slots WHERE id = ?',
+      sql: `
+        SELECT ts.*, ac.user_name as embasa_name 
+        FROM time_slots ts
+        JOIN access_codes ac ON ts.embasa_code_id = ac.id
+        WHERE ts.id = ?
+      `,
       args: [timeSlotId]
     });
     
@@ -624,6 +629,20 @@ app.post('/api/appointments', async (req, res) => {
     if (checkSlotResult.rows[0].is_available !== 1) {
       return res.status(400).json({ message: 'Horário não está disponível' });
     }
+    
+    const timeSlot = checkSlotResult.rows[0];
+    
+    // Buscar informações do SAC para registrar no log
+    const sacResult = await client.execute({
+      sql: 'SELECT * FROM access_codes WHERE id = ?',
+      args: [finalSacId]
+    });
+    
+    if (sacResult.rows.length === 0) {
+      return res.status(404).json({ message: 'Usuário SAC não encontrado' });
+    }
+    
+    const sacUser = sacResult.rows[0];
     
     // Iniciar uma transação
     await client.execute('BEGIN TRANSACTION');
@@ -644,11 +663,39 @@ app.post('/api/appointments', async (req, res) => {
         args: [clientName, ssNumber, comments || '', timeSlotId, finalSacId]
       });
       
+      // Obter o ID do novo agendamento inserido
+      const insertId = Number(result.lastInsertRowid);
+      
+      // Registrar a ação no histórico
+      const details = JSON.stringify({
+        clientName,
+        ssNumber,
+        comments: comments || '',
+        date: timeSlot.date,
+        time: `${timeSlot.start_time} - ${timeSlot.end_time}`,
+        embasa: timeSlot.embasa_name
+      });
+      
+      await client.execute({
+        sql: `
+          INSERT INTO action_logs 
+          (user_id, user_type, user_name, action_type, target_type, target_id, details, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `,
+        args: [
+          finalSacId,
+          'sac',
+          sacUser.user_name,
+          'create',
+          'appointment',
+          insertId,
+          details,
+          Math.floor(Date.now() / 1000)
+        ]
+      });
+      
       // Confirmar a transação
       await client.execute('COMMIT');
-      
-      // Obter o ID do novo agendamento inserido (convertendo BigInt para Number)
-      const insertId = Number(result.lastInsertRowid);
       
       // Retornar o agendamento criado
       res.status(201).json({
@@ -671,6 +718,140 @@ app.post('/api/appointments', async (req, res) => {
       message: 'Falha ao criar agendamento',
       error: String(error),
       stack: error.stack
+    });
+  }
+});
+
+// Rota para excluir um agendamento
+app.delete('/api/appointments/:id', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const userId = parseInt(req.query.userId);
+    const userType = req.query.userType;
+    const userName = req.query.userName;
+    
+    if (!userId || !userType || !userName) {
+      return res.status(400).json({ 
+        message: 'userId, userType e userName são obrigatórios' 
+      });
+    }
+    
+    // Verificar se o agendamento existe
+    const appointmentResult = await client.execute({
+      sql: `
+        SELECT a.*, ts.date, ts.start_time, ts.end_time, ts.embasa_code_id, ts.id as time_slot_id
+        FROM appointments a
+        JOIN time_slots ts ON a.time_slot_id = ts.id
+        WHERE a.id = ?
+      `,
+      args: [id]
+    });
+    
+    if (appointmentResult.rows.length === 0) {
+      return res.status(404).json({ message: 'Agendamento não encontrado' });
+    }
+    
+    const appointment = appointmentResult.rows[0];
+    
+    // Verificar se o usuário tem permissão (SAC pode excluir seus agendamentos, EMBASA pode excluir agendamentos no seu local)
+    if (userType === 'sac' && appointment.sac_code_id !== userId) {
+      return res.status(403).json({ message: 'Você só pode excluir seus próprios agendamentos' });
+    } else if (userType === 'embasa' && appointment.embasa_code_id !== userId) {
+      return res.status(403).json({ message: 'Você só pode excluir agendamentos da sua unidade' });
+    }
+    
+    // Iniciar uma transação
+    await client.execute('BEGIN TRANSACTION');
+    
+    try {
+      // Liberar o horário
+      await client.execute({
+        sql: 'UPDATE time_slots SET is_available = 1 WHERE id = ?',
+        args: [appointment.time_slot_id]
+      });
+      
+      // Obter detalhes do agendamento antes de excluir (para registro)
+      const details = JSON.stringify({
+        clientName: appointment.client_name,
+        ssNumber: appointment.ss_number,
+        date: appointment.date,
+        timeSlot: `${appointment.start_time} - ${appointment.end_time}`
+      });
+      
+      // Excluir o agendamento
+      await client.execute({
+        sql: 'DELETE FROM appointments WHERE id = ?',
+        args: [id]
+      });
+      
+      // Registrar a ação no histórico
+      await client.execute({
+        sql: `
+          INSERT INTO action_logs 
+          (user_id, user_type, user_name, action_type, target_type, target_id, details, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `,
+        args: [
+          userId,
+          userType,
+          userName,
+          'delete',
+          'appointment',
+          id,
+          details,
+          Math.floor(Date.now() / 1000)
+        ]
+      });
+      
+      // Confirmar a transação
+      await client.execute('COMMIT');
+      
+      res.status(204).end(); // Sucesso sem conteúdo
+    } catch (error) {
+      // Em caso de erro, reverter a transação
+      await client.execute('ROLLBACK');
+      throw error;
+    }
+  } catch (error) {
+    console.error('Erro ao excluir agendamento:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Falha ao excluir agendamento',
+      error: String(error)
+    });
+  }
+});
+
+// Rota para listar logs de ações (para admin)
+app.get('/api/action-logs', async (req, res) => {
+  try {
+    console.log('Listando logs de ações...');
+    const result = await client.execute(`
+      SELECT * FROM action_logs ORDER BY created_at DESC LIMIT 500
+    `);
+    
+    console.log('Logs encontrados:', result.rows);
+    
+    // Mapear para o formato esperado pelo frontend
+    const logs = result.rows.map(row => ({
+      id: Number(row.id),
+      userId: Number(row.user_id),
+      userType: row.user_type,
+      userName: row.user_name,
+      actionType: row.action_type,
+      targetType: row.target_type,
+      targetId: Number(row.target_id),
+      details: row.details ? JSON.parse(row.details) : null,
+      createdAt: new Date(row.created_at * 1000).toISOString()
+    }));
+    
+    res.json(logs);
+  } catch (error) {
+    console.error('Erro ao listar logs:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Falha ao listar logs',
+      error: String(error)
     });
   }
 });

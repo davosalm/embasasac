@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -10,11 +10,22 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Calendar, Clock, Building, CheckCircle, RefreshCw } from "lucide-react";
+import { Calendar, Clock, Building, CheckCircle, RefreshCw, Trash2, AlertCircle } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Header } from "@/components/header";
 import { BookingModal } from "@/components/modals/booking-modal";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/lib/auth";
+import { useToast } from "@/hooks/use-toast";
 import { formatDate, formatTimeRange } from "@/lib/utils";
 import type { TimeSlotWithEmbasa, AppointmentWithDetails } from "@shared/schema";
 
@@ -22,8 +33,12 @@ export default function SacDashboard() {
   const [bookingModalOpen, setBookingModalOpen] = useState(false);
   const [selectedTimeSlot, setSelectedTimeSlot] = useState<TimeSlotWithEmbasa | null>(null);
   const [filterEmbasa, setFilterEmbasa] = useState<string>("all");
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [appointmentToDelete, setAppointmentToDelete] = useState<AppointmentWithDetails | null>(null);
+  
   const { currentUser } = useAuth();
   const queryClient = useQueryClient();
+  const { toast } = useToast();
 
   const { 
     data: availableSlots = [], 
@@ -42,6 +57,41 @@ export default function SacDashboard() {
     enabled: !!currentUser,
   });
 
+  const deleteAppointmentMutation = useMutation({
+    mutationFn: async (appointmentId: number) => {
+      if (!currentUser) throw new Error("Usuário não autenticado");
+      
+      const response = await apiRequest(
+        "DELETE", 
+        `/api/appointments/${appointmentId}?userId=${currentUser.id}&userType=${currentUser.userType}&userName=${encodeURIComponent(currentUser.userName)}`
+      );
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Erro ao excluir agendamento");
+      }
+      
+      return true;
+    },
+    onSuccess: () => {
+      toast({
+        title: "Agendamento excluído",
+        description: "O agendamento foi excluído com sucesso",
+      });
+      
+      refetchSlots();
+      refetchAppointments();
+      setAppointmentToDelete(null);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Erro ao excluir agendamento",
+        description: error.message || "Ocorreu um erro ao excluir o agendamento",
+        variant: "destructive",
+      });
+    }
+  });
+
   const handleBookSlot = (slot: TimeSlotWithEmbasa) => {
     setSelectedTimeSlot(slot);
     setBookingModalOpen(true);
@@ -50,6 +100,18 @@ export default function SacDashboard() {
   const refreshData = () => {
     refetchSlots();
     refetchAppointments();
+  };
+
+  const handleDeleteAppointment = (appointment: AppointmentWithDetails) => {
+    setAppointmentToDelete(appointment);
+    setDeleteDialogOpen(true);
+  };
+
+  const confirmDeleteAppointment = () => {
+    if (appointmentToDelete) {
+      deleteAppointmentMutation.mutate(appointmentToDelete.id);
+      setDeleteDialogOpen(false);
+    }
   };
 
   // Get unique EMBASA units for filtering
@@ -219,9 +281,19 @@ export default function SacDashboard() {
                           )}
                         </div>
                       </div>
-                      <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
-                        Agendado
-                      </Badge>
+                      <div className="flex items-center">
+                        <Badge className="mr-4 bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+                          Agendado
+                        </Badge>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                          onClick={() => handleDeleteAppointment(appointment)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -230,11 +302,39 @@ export default function SacDashboard() {
           </Card>
         </div>
       </main>
+      
+      {/* Modals */}
       <BookingModal
         open={bookingModalOpen}
         onOpenChange={setBookingModalOpen}
         timeSlot={selectedTimeSlot}
       />
+      
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir o agendamento para {appointmentToDelete?.clientName}?
+              <br />
+              SS: {appointmentToDelete?.ssNumber}
+              <br />
+              Data: {appointmentToDelete && formatDate(appointmentToDelete.timeSlot.date)}
+              <br />
+              Horário: {appointmentToDelete && formatTimeRange(appointmentToDelete.timeSlot.startTime, appointmentToDelete.timeSlot.endTime)}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700"
+              onClick={confirmDeleteAppointment}
+            >
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

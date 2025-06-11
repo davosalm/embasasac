@@ -11,6 +11,16 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Plus, Clock, Trash2, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Header } from "@/components/header";
 import { CreateSlotModal } from "@/components/modals/create-slot-modal";
 import { apiRequest } from "@/lib/queryClient";
@@ -24,6 +34,9 @@ export default function EmbasaDashboard() {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [filterSac, setFilterSac] = useState<string>("all");
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [appointmentToDelete, setAppointmentToDelete] = useState<AppointmentWithDetails | null>(null);
+
   const { toast } = useToast();
   const { currentUser } = useAuth();
   const queryClient = useQueryClient();
@@ -46,11 +59,11 @@ export default function EmbasaDashboard() {
         title: "Horário removido com sucesso",
         description: "O horário foi excluído do sistema",
       });
-      queryClient.invalidateQueries({ 
-        queryKey: ["/api/time-slots/embasa", currentUser!.id] 
+      queryClient.invalidateQueries({
+        queryKey: ["/api/time-slots/embasa", currentUser!.id],
       });
-      queryClient.invalidateQueries({ 
-        queryKey: ["/api/time-slots/available"] 
+      queryClient.invalidateQueries({
+        queryKey: ["/api/time-slots/available"],
       });
     },
     onError: (error: any) => {
@@ -62,10 +75,62 @@ export default function EmbasaDashboard() {
     },
   });
 
+  const deleteAppointmentMutation = useMutation({
+    mutationFn: async (appointmentId: number) => {
+      if (!currentUser) throw new Error("Usuário não autenticado");
+
+      const response = await apiRequest(
+        "DELETE",
+        `/api/appointments/${appointmentId}?userId=${currentUser.id}&userType=${currentUser.userType}&userName=${encodeURIComponent(currentUser.userName)}`
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Erro ao excluir agendamento");
+      }
+
+      return true;
+    },
+    onSuccess: () => {
+      toast({
+        title: "Agendamento cancelado",
+        description: "O agendamento foi cancelado com sucesso",
+      });
+
+      refetchTimeSlots();
+      refetchAppointments();
+      setAppointmentToDelete(null);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Erro ao cancelar agendamento",
+        description: error.message || "Ocorreu um erro ao cancelar o agendamento",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleDeleteSlot = (id: number) => {
     if (confirm("Tem certeza que deseja remover este horário?")) {
       deleteSlotMutation.mutate(id);
     }
+  };
+
+  const handleDeleteAppointment = (appointment: AppointmentWithDetails) => {
+    setAppointmentToDelete(appointment);
+    setDeleteDialogOpen(true);
+  };
+
+  const confirmDeleteAppointment = () => {
+    if (appointmentToDelete) {
+      deleteAppointmentMutation.mutate(appointmentToDelete.id);
+      setDeleteDialogOpen(false);
+    }
+  };
+
+  const refreshData = () => {
+    refetchTimeSlots();
+    refetchAppointments();
   };
 
   const generateCalendarDays = () => {
@@ -77,20 +142,26 @@ export default function EmbasaDashboard() {
     const startingDayOfWeek = firstDay.getDay();
 
     const days = [];
-    
+
     // Empty cells for days before the first day of the month
     for (let i = 0; i < startingDayOfWeek; i++) {
       days.push(null);
     }
-    
+
     // Days of the month
     for (let day = 1; day <= daysInMonth; day++) {
-      const dateStr = `${year}-${(month + 1).toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
-      const slotsForDay = timeSlots.filter(slot => slot.date === dateStr);
-      const appointmentsForDay = allAppointments.filter(apt => apt.timeSlot.date === dateStr && apt.timeSlot.embasa.id === currentUser?.id);
+      const dateStr = `${year}-${(month + 1).toString().padStart(2, "0")}-${day
+        .toString()
+        .padStart(2, "0")}`;
+      const slotsForDay = timeSlots.filter((slot) => slot.date === dateStr);
+      const appointmentsForDay = allAppointments.filter(
+        (apt) =>
+          apt.timeSlot.date === dateStr &&
+          apt.timeSlot.embasa.id === currentUser?.id
+      );
       days.push({ day, dateStr, slots: slotsForDay, appointments: appointmentsForDay });
     }
-    
+
     return days;
   };
 
@@ -98,16 +169,26 @@ export default function EmbasaDashboard() {
     setSelectedDate(dateStr === selectedDate ? null : dateStr);
   };
 
-  const weekDays = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+  const weekDays = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
   const monthNames = [
-    'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
-    'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+    "Janeiro",
+    "Fevereiro",
+    "Março",
+    "Abril",
+    "Maio",
+    "Junho",
+    "Julho",
+    "Agosto",
+    "Setembro",
+    "Outubro",
+    "Novembro",
+    "Dezembro",
   ];
 
-  const navigateMonth = (direction: 'prev' | 'next') => {
-    setCurrentMonth(prev => {
+  const navigateMonth = (direction: "prev" | "next") => {
+    setCurrentMonth((prev) => {
       const newDate = new Date(prev);
-      if (direction === 'prev') {
+      if (direction === "prev") {
         newDate.setMonth(prev.getMonth() - 1);
       } else {
         newDate.setMonth(prev.getMonth() + 1);
@@ -117,22 +198,21 @@ export default function EmbasaDashboard() {
   };
 
   // Get unique SAC units for filtering from appointments
-  const sacUnits = Array.from(
-    new Set(allAppointments.map(apt => apt.sac.userName))
-  );
+  const sacUnits = Array.from(new Set(allAppointments.map((apt) => apt.sac.userName)));
 
   // Filter appointments based on selected SAC unit
-  const filteredAppointments = filterSac === "all" 
-    ? allAppointments.filter(apt => apt.timeSlot.embasa.id === currentUser?.id)
-    : allAppointments.filter(apt => 
-        apt.timeSlot.embasa.id === currentUser?.id && 
-        apt.sac.userName === filterSac
-      );
+  const filteredAppointments =
+    filterSac === "all"
+      ? allAppointments.filter((apt) => apt.timeSlot.embasa.id === currentUser?.id)
+      : allAppointments.filter(
+          (apt) =>
+            apt.timeSlot.embasa.id === currentUser?.id && apt.sac.userName === filterSac
+        );
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <Header />
-      
+
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="space-y-6">
           <div className="flex justify-between items-center">
@@ -140,6 +220,14 @@ export default function EmbasaDashboard() {
               Disponibilizar Horários
             </h2>
             <div className="flex items-center space-x-4">
+              <Button
+                onClick={refreshData}
+                variant="outline"
+                className="flex items-center space-x-2"
+              >
+                <RefreshCw className="h-4 w-4" />
+                <span>Atualizar Dados</span>
+              </Button>
               <div className="flex items-center space-x-2">
                 <span className="text-sm text-gray-600 dark:text-gray-400">
                   Filtrar agendamentos por SAC:
@@ -150,7 +238,7 @@ export default function EmbasaDashboard() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">Todos</SelectItem>
-                    {sacUnits.map(unit => (
+                    {sacUnits.map((unit) => (
                       <SelectItem key={unit} value={unit}>
                         {unit}
                       </SelectItem>
@@ -179,14 +267,14 @@ export default function EmbasaDashboard() {
                   <Button
                     variant="outline"
                     size="icon"
-                    onClick={() => navigateMonth('prev')}
+                    onClick={() => navigateMonth("prev")}
                   >
                     <ChevronLeft className="h-4 w-4" />
                   </Button>
                   <Button
                     variant="outline"
                     size="icon"
-                    onClick={() => navigateMonth('next')}
+                    onClick={() => navigateMonth("next")}
                   >
                     <ChevronRight className="h-4 w-4" />
                   </Button>
@@ -195,23 +283,26 @@ export default function EmbasaDashboard() {
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-7 gap-1 mb-4">
-                {weekDays.map(day => (
-                  <div key={day} className="p-2 text-center text-sm font-medium text-gray-500 dark:text-gray-400">
+                {weekDays.map((day) => (
+                  <div
+                    key={day}
+                    className="p-2 text-center text-sm font-medium text-gray-500 dark:text-gray-400"
+                  >
                     {day}
                   </div>
                 ))}
               </div>
-              
+
               <div className="grid grid-cols-7 gap-1">
                 {generateCalendarDays().map((dayData, index) => (
                   <div
                     key={index}
                     className={`aspect-square p-2 text-center text-sm border border-gray-200 dark:border-gray-700 rounded ${
-                      dayData ? 'hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer' : ''
+                      dayData ? "hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer" : ""
                     } ${
-                      dayData?.slots.length ? 'bg-primary-50 dark:bg-primary-900' : ''
+                      dayData?.slots.length ? "bg-primary-50 dark:bg-primary-900" : ""
                     } ${
-                      dayData && selectedDate === dayData.dateStr ? 'ring-2 ring-primary-500' : ''
+                      dayData && selectedDate === dayData.dateStr ? "ring-2 ring-primary-500" : ""
                     }`}
                     onClick={() => dayData && handleDateClick(dayData.dateStr)}
                   >
@@ -222,12 +313,13 @@ export default function EmbasaDashboard() {
                         </div>
                         {dayData.slots.length > 0 && (
                           <div className="text-xs text-primary-600 dark:text-primary-400 mt-1">
-                            {dayData.slots.length} {dayData.slots.length === 1 ? 'slot' : 'slots'}
+                            {dayData.slots.length} {dayData.slots.length === 1 ? "slot" : "slots"}
                           </div>
                         )}
                         {dayData.appointments.length > 0 && (
                           <div className="text-xs text-green-600 dark:text-green-400 mt-1">
-                            {dayData.appointments.length} {dayData.appointments.length === 1 ? 'agendamento' : 'agendamentos'}
+                            {dayData.appointments.length}{" "}
+                            {dayData.appointments.length === 1 ? "agendamento" : "agendamentos"}
                           </div>
                         )}
                       </>
@@ -242,36 +334,40 @@ export default function EmbasaDashboard() {
                   <h4 className="font-medium text-sm mb-2 text-gray-900 dark:text-white">
                     Detalhes de {formatDate(selectedDate)}
                   </h4>
-                  
+
                   {/* Horários disponibilizados nesta data */}
-                  {timeSlots.filter(slot => slot.date === selectedDate).length > 0 ? (
+                  {timeSlots.filter((slot) => slot.date === selectedDate).length > 0 ? (
                     <div className="mb-4">
                       <h5 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                         Horários disponibilizados:
                       </h5>
                       <div className="space-y-2">
-                        {timeSlots.filter(slot => slot.date === selectedDate).map(slot => (
-                          <div 
-                            key={slot.id} 
-                            className="text-sm p-2 bg-gray-50 dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700 flex justify-between items-center"
-                          >
-                            <div>
-                              <span className="font-medium">{formatTimeRange(slot.startTime, slot.endTime)}</span>
-                              <span className="ml-2 text-gray-600 dark:text-gray-400">
-                                {slot.isAvailable ? 'Disponível' : 'Ocupado'}
-                              </span>
-                            </div>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleDeleteSlot(slot.id)}
-                              className="text-red-600 hover:text-red-900 dark:text-red-400"
-                              disabled={!slot.isAvailable}
+                        {timeSlots
+                          .filter((slot) => slot.date === selectedDate)
+                          .map((slot) => (
+                            <div
+                              key={slot.id}
+                              className="text-sm p-2 bg-gray-50 dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700 flex justify-between items-center"
                             >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        ))}
+                              <div>
+                                <span className="font-medium">
+                                  {formatTimeRange(slot.startTime, slot.endTime)}
+                                </span>
+                                <span className="ml-2 text-gray-600 dark:text-gray-400">
+                                  {slot.isAvailable ? "Disponível" : "Ocupado"}
+                                </span>
+                              </div>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleDeleteSlot(slot.id)}
+                                className="text-red-600 hover:text-red-900 dark:text-red-400"
+                                disabled={!slot.isAvailable}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          ))}
                       </div>
                     </div>
                   ) : (
@@ -279,33 +375,61 @@ export default function EmbasaDashboard() {
                       Não há horários disponibilizados para esta data.
                     </p>
                   )}
-                  
+
                   {/* Agendamentos nesta data */}
                   <h5 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                     Agendamentos:
                   </h5>
-                  {allAppointments.filter(apt => apt.timeSlot.date === selectedDate).length === 0 ? (
+                  {allAppointments.filter(
+                    (apt) =>
+                      apt.timeSlot.date === selectedDate &&
+                      apt.timeSlot.embasa.id === currentUser?.id
+                  ).length === 0 ? (
                     <p className="text-sm text-gray-500 dark:text-gray-400">
                       Não há agendamentos para esta data.
                     </p>
                   ) : (
                     <div className="space-y-2">
-                      {allAppointments.filter(apt => apt.timeSlot.date === selectedDate).map(apt => (
-                        <div 
-                          key={apt.id} 
-                          className="text-sm p-2 bg-gray-50 dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700"
-                        >
-                          <div className="font-medium">{apt.clientName} - SS: {apt.ssNumber}</div>
-                          <div className="text-gray-600 dark:text-gray-400">
-                            {formatTimeRange(apt.timeSlot.startTime, apt.timeSlot.endTime)} • SAC: {apt.sac.userName}
-                          </div>
-                          {apt.comments && (
-                            <div className="text-gray-500 mt-1">
-                              <span className="font-medium">Comentário:</span> {apt.comments}
+                      {allAppointments
+                        .filter(
+                          (apt) =>
+                            apt.timeSlot.date === selectedDate &&
+                            apt.timeSlot.embasa.id === currentUser?.id
+                        )
+                        .map((apt) => (
+                          <div
+                            key={apt.id}
+                            className="text-sm p-2 bg-gray-50 dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700"
+                          >
+                            <div className="flex justify-between items-center">
+                              <div>
+                                <div className="font-medium">
+                                  {apt.clientName} - SS: {apt.ssNumber}
+                                </div>
+                                <div className="text-gray-600 dark:text-gray-400">
+                                  {formatTimeRange(
+                                    apt.timeSlot.startTime,
+                                    apt.timeSlot.endTime
+                                  )}{" "}
+                                  • SAC: {apt.sac.userName}
+                                </div>
+                                {apt.comments && (
+                                  <div className="text-gray-500 mt-1">
+                                    <span className="font-medium">Comentário:</span> {apt.comments}
+                                  </div>
+                                )}
+                              </div>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleDeleteAppointment(apt)}
+                                className="text-red-600 hover:text-red-900 dark:text-red-400"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
                             </div>
-                          )}
-                        </div>
-                      ))}
+                          </div>
+                        ))}
                     </div>
                   )}
                 </div>
@@ -403,7 +527,11 @@ export default function EmbasaDashboard() {
                             {appointment.clientName} - SS: {appointment.ssNumber}
                           </div>
                           <div className="text-sm text-gray-600 dark:text-gray-400">
-                            {formatDate(appointment.timeSlot.date)} • {formatTimeRange(appointment.timeSlot.startTime, appointment.timeSlot.endTime)}
+                            {formatDate(appointment.timeSlot.date)} •{" "}
+                            {formatTimeRange(
+                              appointment.timeSlot.startTime,
+                              appointment.timeSlot.endTime
+                            )}
                           </div>
                           <div className="text-xs text-gray-500 dark:text-gray-500">
                             SAC: {appointment.sac.userName}
@@ -415,9 +543,19 @@ export default function EmbasaDashboard() {
                           )}
                         </div>
                       </div>
-                      <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
-                        Agendado
-                      </Badge>
+                      <div className="flex items-center space-x-2">
+                        <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                          Agendado
+                        </Badge>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleDeleteAppointment(appointment)}
+                          className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -427,10 +565,40 @@ export default function EmbasaDashboard() {
         </div>
       </main>
 
-      <CreateSlotModal
-        open={createSlotModalOpen}
-        onOpenChange={setCreateSlotModalOpen}
-      />
+      <CreateSlotModal open={createSlotModalOpen} onOpenChange={setCreateSlotModalOpen} />
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar Cancelamento</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja cancelar o agendamento para {appointmentToDelete?.clientName}?
+              <br />
+              SS: {appointmentToDelete?.ssNumber}
+              <br />
+              Data: {appointmentToDelete && formatDate(appointmentToDelete.timeSlot.date)}
+              <br />
+              Horário:{" "}
+              {appointmentToDelete &&
+                formatTimeRange(
+                  appointmentToDelete.timeSlot.startTime,
+                  appointmentToDelete.timeSlot.endTime
+                )}
+              <br />
+              SAC: {appointmentToDelete?.sac.userName}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700"
+              onClick={confirmDeleteAppointment}
+            >
+              Excluir Agendamento
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
   SelectContent,
@@ -544,84 +545,158 @@ export default function EmbasaDashboard() {
             </CardContent>
           </Card>
 
-          {/* Appointments Section */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Agendamentos {filterSac !== "all" && `- ${filterSac}`}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {filteredAppointments.length === 0 ? (
-                <div className="text-center py-8">
-                  <div className="text-gray-500 dark:text-gray-400">
-                    Nenhum agendamento encontrado
-                  </div>
-                </div>
-              ) : (
-                <div className="divide-y divide-gray-200 dark:divide-gray-700">
-                  {filteredAppointments.map((appointment) => (
-                    <div key={appointment.id} className="py-6 flex items-center justify-between">
-                      <div className="flex items-center space-x-4">
-                        <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900 rounded-lg flex items-center justify-center">
-                          <Clock className="text-blue-600 dark:text-blue-400 h-5 w-5" />
-                        </div>
-                        <div>
-                          <div className="text-sm font-medium text-gray-900 dark:text-white">
-                            {appointment.clientName} - SS: {appointment.ssNumber}
-                          </div>
-                          <div className="text-sm text-gray-600 dark:text-gray-400">
-                            {formatDate(appointment.timeSlot.date)} •{" "}
-                            {formatTimeRange(
-                              appointment.timeSlot.startTime,
-                              appointment.timeSlot.endTime
-                            )}
-                          </div>
-                          <div className="text-xs text-gray-500 dark:text-gray-500">
-                            SAC: {appointment.sac.userName}
-                          </div>
-                          {appointment.comments && (
-                            <div className="text-xs text-gray-500 dark:text-gray-500 mt-1">
-                              Comentários: {appointment.comments}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <Badge 
-                          className={`${
-                            appointment.isConfirmed 
-                              ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200" 
-                              : "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200"
-                          }`}
-                        >
-                          {appointment.isConfirmed ? "Confirmado" : "Pendente"}
-                        </Badge>
-                        {!appointment.isConfirmed && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleConfirmAppointment(appointment.id)}
-                            className="text-green-600 hover:text-green-900 border-green-200 hover:border-green-300 hover:bg-green-50"
-                            disabled={confirmAppointmentMutation.isPending}
-                          >
-                            <CheckCircle className="h-4 w-4 mr-1" />
-                            Confirmar
-                          </Button>
-                        )}
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleDeleteAppointment(appointment)}
-                          className="text-red-500 hover:text-red-700 hover:bg-red-50"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+          {/* Appointments Section with Tabs */}
+          <Tabs defaultValue="pending" className="w-full">
+            <TabsList className="mb-6">
+              <TabsTrigger value="pending" className="flex items-center space-x-2">
+                <Clock className="h-4 w-4" />
+                <span>Agendamentos Pendentes</span>
+              </TabsTrigger>
+              <TabsTrigger value="confirmed" className="flex items-center space-x-2">
+                <CheckCircle className="h-4 w-4" />
+                <span>Agendamentos Confirmados</span>
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="pending">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Agendamentos Pendentes {filterSac !== "all" && `- ${filterSac}`}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {filteredAppointments.filter(apt => !apt.isConfirmed).length === 0 ? (
+                    <div className="text-center py-8">
+                      <div className="text-gray-500 dark:text-gray-400">
+                        Nenhum agendamento pendente encontrado
                       </div>
                     </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                  ) : (
+                    <div className="divide-y divide-gray-200 dark:divide-gray-700">
+                      {filteredAppointments.filter(apt => !apt.isConfirmed).map((appointment) => (
+                        <div key={appointment.id} className="py-6 flex items-center justify-between">
+                          <div className="flex items-center space-x-4">
+                            <div className="w-12 h-12 bg-yellow-100 dark:bg-yellow-900 rounded-lg flex items-center justify-center">
+                              <Clock className="text-yellow-600 dark:text-yellow-400 h-5 w-5" />
+                            </div>
+                            <div>
+                              <div className="text-sm font-medium text-gray-900 dark:text-white">
+                                {appointment.clientName} - SS: {appointment.ssNumber}
+                              </div>
+                              <div className="text-sm text-gray-600 dark:text-gray-400">
+                                {formatDate(appointment.timeSlot.date)} •{" "}
+                                {formatTimeRange(
+                                  appointment.timeSlot.startTime,
+                                  appointment.timeSlot.endTime
+                                )}
+                              </div>
+                              <div className="text-xs text-gray-500 dark:text-gray-500">
+                                SAC: {appointment.sac.userName}
+                              </div>
+                              {appointment.comments && (
+                                <div className="text-xs text-gray-500 dark:text-gray-500 mt-1">
+                                  Comentários: {appointment.comments}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <Badge className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200">
+                              Pendente
+                            </Badge>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleConfirmAppointment(appointment.id)}
+                              className="text-green-600 hover:text-green-900 border-green-200 hover:border-green-300 hover:bg-green-50"
+                              disabled={confirmAppointmentMutation.isPending}
+                            >
+                              <CheckCircle className="h-4 w-4 mr-1" />
+                              Confirmar
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleDeleteAppointment(appointment)}
+                              className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="confirmed">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Agendamentos Confirmados {filterSac !== "all" && `- ${filterSac}`}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {filteredAppointments.filter(apt => apt.isConfirmed).length === 0 ? (
+                    <div className="text-center py-8">
+                      <div className="text-gray-500 dark:text-gray-400">
+                        Nenhum agendamento confirmado encontrado
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-gray-200 dark:divide-gray-700">
+                      {filteredAppointments.filter(apt => apt.isConfirmed).map((appointment) => (
+                        <div key={appointment.id} className="py-6 flex items-center justify-between">
+                          <div className="flex items-center space-x-4">
+                            <div className="w-12 h-12 bg-green-100 dark:bg-green-900 rounded-lg flex items-center justify-center">
+                              <CheckCircle className="text-green-600 dark:text-green-400 h-5 w-5" />
+                            </div>
+                            <div>
+                              <div className="text-sm font-medium text-gray-900 dark:text-white">
+                                {appointment.clientName} - SS: {appointment.ssNumber}
+                              </div>
+                              <div className="text-sm text-gray-600 dark:text-gray-400">
+                                {formatDate(appointment.timeSlot.date)} •{" "}
+                                {formatTimeRange(
+                                  appointment.timeSlot.startTime,
+                                  appointment.timeSlot.endTime
+                                )}
+                              </div>
+                              <div className="text-xs text-gray-500 dark:text-gray-500">
+                                SAC: {appointment.sac.userName}
+                              </div>
+                              {appointment.comments && (
+                                <div className="text-xs text-gray-500 dark:text-gray-500 mt-1">
+                                  Comentários: {appointment.comments}
+                                </div>
+                              )}
+                              {appointment.confirmedAt && (
+                                <div className="text-xs text-green-600 dark:text-green-400 mt-1">
+                                  Confirmado em: {new Date(appointment.confirmedAt).toLocaleDateString('pt-BR')} às {new Date(appointment.confirmedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                              Confirmado
+                            </Badge>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleDeleteAppointment(appointment)}
+                              className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
         </div>
       </main>
 

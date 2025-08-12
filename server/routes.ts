@@ -2,8 +2,10 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { authenticate, authorize } from "./middlewares";
-import { insertAccessCodeSchema, insertTimeSlotSchema, insertAppointmentSchema } from "@shared/schema";
+import { insertAccessCodeSchema, insertTimeSlotSchema, insertAppointmentSchema, appointments, timeSlots } from "@shared/schema";
 import { z } from "zod";
+import { db } from "./db";
+import { eq } from "drizzle-orm";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Authentication
@@ -311,6 +313,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (error instanceof z.ZodError) {
         return res.status(400).json({ message: "Dados inválidos", errors: error.errors });
       }
+      res.status(500).json({ message: "Erro interno do servidor" });
+    }
+  });
+
+  // Delete appointment route
+  app.delete("/api/appointments/:id", authenticate, authorize(['embasa', 'sac', 'admin']), async (req, res) => {
+    try {
+      const appointmentId = parseInt(req.params.id);
+      
+      // Get appointment details first
+      const appointments = await storage.getAllAppointments();
+      const appointment = appointments.find(apt => apt.id === appointmentId);
+      
+      if (!appointment) {
+        return res.status(404).json({ message: "Agendamento não encontrado" });
+      }
+      
+      // Check permissions
+      if (req.user.type === 'sac' && appointment.sacCodeId !== req.user.id) {
+        return res.status(403).json({ message: "Não autorizado a excluir agendamentos de outro SAC" });
+      }
+      
+      if (req.user.type === 'embasa' && appointment.timeSlot.embasa.id !== req.user.id) {
+        return res.status(403).json({ message: "Não autorizado a excluir agendamentos de outra unidade EMBASA" });
+      }
+      
+      // Delete appointment and make time slot available again
+      await db.delete(appointments).where(eq(appointments.id, appointmentId));
+      await db.update(timeSlots)
+        .set({ isAvailable: true })
+        .where(eq(timeSlots.id, appointment.timeSlotId));
+      
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting appointment:", error);
       res.status(500).json({ message: "Erro interno do servidor" });
     }
   });

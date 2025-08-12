@@ -188,21 +188,27 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createAppointment(data: InsertAppointment): Promise<Appointment> {
-    const [result] = await db.insert(appointments).values({
-      timeSlotId: data.timeSlotId,
-      sacCodeId: data.sacCodeId,
-      clientName: data.clientName,
-      ssNumber: data.ssNumber,
-      comments: data.comments ?? null,
-      isConfirmed: false,
-    }).returning();
-    
-    // Mark time slot as unavailable
-    await db.update(timeSlots)
-      .set({ isAvailable: false })
-      .where(eq(timeSlots.id, data.timeSlotId));
-    
-    return result;
+    try {
+      // Create appointment first
+      const [result] = await db.insert(appointments).values({
+        timeSlotId: data.timeSlotId,
+        sacCodeId: data.sacCodeId,
+        clientName: data.clientName,
+        ssNumber: data.ssNumber,
+        comments: data.comments ?? null,
+        isConfirmed: false,
+      }).returning();
+      
+      // Then mark time slot as unavailable
+      await db.update(timeSlots)
+        .set({ isAvailable: false })
+        .where(eq(timeSlots.id, data.timeSlotId));
+      
+      return result;
+    } catch (error) {
+      console.error("Error creating appointment:", error);
+      throw error;
+    }
   }
 
   async confirmAppointment(id: number): Promise<Appointment> {

@@ -18,4 +18,4 @@
 
 [functions]
   node_bundler = "esbuild"
-  external_node_modules = ["lightningcss", "esbuild", "@libsql/client"]
+  external_node_modules = ["lightningcss", "esbuild", "@libsql/client", "cors", "serverless-http", "express"]

@@ -1,0 +1,31 @@
+Quero criar um aplicativo web onde o usuário deverá inserir um código e será redirecionado a um painel. O programa terá deploy no Github para ser utilizado na plataforma VERCEL. Serão três tipos de usuários:
+
+    Administrador: poderá gerar novos códigos e apagar antigos, além de conseguir ajustar os cargos de cada um dos códigos.
+    EMBASA: usuário que irá disponibilizar datas no calendário que poderão ser visualizadas pelo usuário "SAC"
+    SAC: usuário que conseguirá selecionar a data e o horário disponibilizados pelo usuário EMBASA
+
+A ideia é que o usuário EMBASA possa disponibilizar horários e o usuário SAC possa visualizar e cadastrar "visitas técnicas" a partir das datas disponibilizadas. O usuário SAC, ao selecionar o dia e a hora que foi disponibilizada, poderá colocar algum comentário.
+
+Confira se está dando erro ao criar horário/disponibilidade no usuário EMBASA
+
+Usar o banco de dados do TURSO.
+
+eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3NDc0MDI4OTYsImlkIjoiY2E4YzRhMmQtZDhlZC00ZjY3LWEwZmMtNjZmNGYyZDZiZTM3IiwicmlkIjoiZjY5OGY1ZmYtMmQzNi00MTcyLTk0ZWMtMmU5NDg2YWZjYmM2In0._w_H0_pCmp2s-KS7RRvB5rUP623X1WjgdP_Bf3mckDJbI-NfnlU3ZoPFeloiAc_qnC2Thc-YPph-ITupq2zkBw
+
+libsql://agendamentoembasa-davosalm.aws-us-east-1.turso.io
+
+Insira um modo noturno
+O usuário SAC não consegue fazer o cadastro com o horário disponibilizado. Corrija.
+Ao invés de solicitar todos aqueles dados para fazer o agendamento, solicite apenas Nome do Cliente, Número da SS e comentário.
+Ao criar o usuário SAC e o usuário EMBASA, também devo colocar uma palavra ao lado para que seja exibida nas tags referidas. Exemplo: SAC Cabula, EMBASA Federação. Desta forma, ao olhar no calendário, será possível filtrar por SAC ou por EMBASA.
+Os horários disponibilizados pelo usuário EMBASA devem ser de intervalos de no máximo 2 horas (8h às 10h, por exemplo).
+
+No agendamento da embasa, remover Horário Final. Deixar apenas horário. Remover também "capacidade".
+
+Ao criar um novo código, permita que o administrador dê um "nome" ao usuário daquele código - este nome será utilizado para filtragem do calendário.
+
+Deixe o modo claro como padrão.
+
+O usuário "SAC" não está conseguindo gerar o agendamento ao clicar no botão, nada acontece. Além disso, os únicos campos obrigatórios são Nome e número da SS.
+
+Quero dar deploy no Vercel - como ele é serverless, também quero uma solução para integrar o banco de dados do turso nele

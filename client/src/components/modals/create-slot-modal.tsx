@@ -64,7 +64,7 @@ export function CreateSlotModal({ open, onOpenChange }: CreateSlotModalProps) {
       });
       
       if (!response.ok) {
-        const errorData = await response.json();
+        const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.message || "Erro ao criar horário");
       }
       
@@ -84,8 +84,10 @@ export function CreateSlotModal({ open, onOpenChange }: CreateSlotModalProps) {
       });
       form.reset();
       onOpenChange(false);
+      setError(null); // Limpar qualquer erro anterior
     },
     onError: (error: any) => {
+      console.error("Erro na mutação:", error);
       setError(error.message || "Erro interno do servidor");
     },
   });

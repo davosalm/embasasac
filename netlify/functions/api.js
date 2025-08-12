@@ -114,8 +114,8 @@ app.post('/api/appointments', async (req, res) => {
     // Usar batch para executar múltiplas operações atomicamente
     const batch = [
       {
-        sql: `INSERT INTO appointments (time_slot_id, sac_code_id, client_name, ss_number, comments, is_confirmed, created_at) 
-              VALUES (?, ?, ?, ?, ?, 0, strftime('%s', 'now'))`,
+        sql: `INSERT INTO appointments (time_slot_id, sac_code_id, client_name, ss_number, comments, created_at) 
+              VALUES (?, ?, ?, ?, ?, strftime('%s', 'now'))`,
         args: [timeSlotId, sacCodeId, clientName, ssNumber, comments || null]
       },
       {
@@ -165,6 +165,25 @@ app.patch('/api/appointments/:id/confirm', async (req, res) => {
 
     if (appointmentCheck.rows.length === 0) {
       return res.status(404).json({ message: 'Agendamento não encontrado' });
+    }
+
+    // Verificar se as colunas existem antes de tentar atualizar
+    try {
+      await client.execute({
+        sql: 'ALTER TABLE appointments ADD COLUMN is_confirmed INTEGER DEFAULT 0',
+        args: []
+      });
+    } catch (e) {
+      // Coluna já existe, isso é esperado
+    }
+
+    try {
+      await client.execute({
+        sql: 'ALTER TABLE appointments ADD COLUMN confirmed_at INTEGER',
+        args: []
+      });
+    } catch (e) {
+      // Coluna já existe, isso é esperado
     }
 
     // Confirmar o agendamento
@@ -245,6 +264,7 @@ app.get('/api/appointments/sac', async (req, res) => {
         ts.end_time as ts_end_time,
         ts.is_available as ts_is_available,
         ts.created_at as ts_created_at,
+        ts.embasa_code_id as ts_embasa_code_id,
         sac.user_name as sac_user_name,
         embasa.id as embasa_id,
         embasa.user_name as embasa_user_name
@@ -263,12 +283,12 @@ app.get('/api/appointments/sac', async (req, res) => {
       clientName: row.client_name,
       ssNumber: row.ss_number,
       comments: row.comments,
-      isConfirmed: Boolean(row.is_confirmed),
+      isConfirmed: Boolean(row.is_confirmed || 0),
       confirmedAt: row.confirmed_at ? new Date(row.confirmed_at * 1000) : null,
       createdAt: new Date(row.created_at * 1000),
       timeSlot: {
         id: row.time_slot_id,
-        embasaCodeId: row.embasa_code_id,
+        embasaCodeId: row.ts_embasa_code_id,
         date: row.ts_date,
         startTime: row.ts_start_time,
         endTime: row.ts_end_time,
@@ -329,7 +349,7 @@ app.get('/api/appointments', authenticate, async (req, res) => {
       clientName: row.client_name,
       ssNumber: row.ss_number,
       comments: row.comments,
-      isConfirmed: Boolean(row.is_confirmed),
+      isConfirmed: Boolean(row.is_confirmed || 0),
       confirmedAt: row.confirmed_at ? new Date(row.confirmed_at * 1000) : null,
       createdAt: new Date(row.created_at * 1000),
       timeSlot: {
@@ -420,6 +440,44 @@ app.post('/api/time-slots', authenticate, async (req, res) => {
     });
   } catch (error) {
     console.error('Erro ao criar time slot:', error);
+    res.status(500).json({ message: 'Erro interno do servidor' });
+  }
+});
+
+// Rota para excluir time slots
+app.delete('/api/time-slots/:id', authenticate, async (req, res) => {
+  try {
+    const timeSlotId = parseInt(req.params.id);
+    
+    if (isNaN(timeSlotId)) {
+      return res.status(400).json({ message: 'ID do time slot inválido' });
+    }
+
+    // Verificar se o time slot existe e pertence ao usuário
+    const timeSlotCheck = await client.execute({
+      sql: 'SELECT * FROM time_slots WHERE id = ? AND embasa_code_id = ?',
+      args: [timeSlotId, req.user.id]
+    });
+
+    if (timeSlotCheck.rows.length === 0) {
+      return res.status(404).json({ message: 'Time slot não encontrado ou sem permissão' });
+    }
+
+    const timeSlot = timeSlotCheck.rows[0];
+
+    // Não permitir exclusão se houver agendamentos
+    if (!timeSlot.is_available) {
+      return res.status(400).json({ message: 'Não é possível excluir um horário que possui agendamentos' });
+    }
+
+    await client.execute({
+      sql: 'DELETE FROM time_slots WHERE id = ?',
+      args: [timeSlotId]
+    });
+
+    res.status(204).send();
+  } catch (error) {
+    console.error('Erro ao excluir time slot:', error);
     res.status(500).json({ message: 'Erro interno do servidor' });
   }
 });

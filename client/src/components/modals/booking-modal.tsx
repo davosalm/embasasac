@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -23,6 +24,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { formatDate, formatTimeRange } from "@/lib/utils";
+import { ErrorNotification } from "@/components/ui/error-notification";
 import type { TimeSlotWithEmbasa } from "@shared/schema";
 
 const bookingSchema = z.object({
@@ -43,6 +45,7 @@ export function BookingModal({ open, onOpenChange, timeSlot }: BookingModalProps
   const { toast } = useToast();
   const { currentUser } = useAuth();
   const queryClient = useQueryClient();
+  const [error, setError] = useState<string | null>(null);
 
   const form = useForm<BookingForm>({
     resolver: zodResolver(bookingSchema),
@@ -61,13 +64,11 @@ export function BookingModal({ open, onOpenChange, timeSlot }: BookingModalProps
         sacId: currentUser!.id,
       });
 
-      // Verificar se a resposta foi bem-sucedida antes de processar o JSON
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.message || "Erro ao realizar agendamento");
       }
 
-      // Se chegou até aqui, a resposta foi bem-sucedida
       return response.status === 204 ? null : await response.json();
     },
     onSuccess: () => {
@@ -85,11 +86,7 @@ export function BookingModal({ open, onOpenChange, timeSlot }: BookingModalProps
       onOpenChange(false);
     },
     onError: (error: any) => {
-      toast({
-        title: "Erro ao realizar agendamento",
-        description: error.message || "Erro interno do servidor",
-        variant: "destructive",
-      });
+      setError(error.message || "Erro interno do servidor");
     },
   });
 
@@ -101,93 +98,100 @@ export function BookingModal({ open, onOpenChange, timeSlot }: BookingModalProps
   if (!timeSlot) return null;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>Agendar Visita Técnica</DialogTitle>
-        </DialogHeader>
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Agendar Visita Técnica</DialogTitle>
+          </DialogHeader>
 
-        <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg mb-4">
-          <div className="text-sm text-gray-600 dark:text-gray-400">
-            Horário selecionado:
-          </div>
-          <div className="font-medium text-gray-900 dark:text-white">
-            {formatDate(timeSlot.date)} - {formatTimeRange(timeSlot.startTime, timeSlot.endTime)}
-          </div>
-          <div className="text-sm text-gray-600 dark:text-gray-400">
-            {timeSlot.embasa.userName}
-          </div>
-        </div>
-
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
-            <FormField
-              control={form.control}
-              name="clientName"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Nome do Cliente *</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Digite o nome completo" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="ssNumber"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Número da SS *</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Digite o número da SS" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="comments"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Comentários</FormLabel>
-                  <FormControl>
-                    <Textarea
-                      placeholder="Observações adicionais (opcional)"
-                      rows={3}
-                      className="resize-none"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <div className="flex space-x-3 pt-4">
-              <Button
-                type="button"
-                variant="outline"
-                className="flex-1"
-                onClick={() => onOpenChange(false)}
-              >
-                Cancelar
-              </Button>
-              <Button
-                type="submit"
-                className="flex-1"
-                disabled={bookingMutation.isPending}
-              >
-                {bookingMutation.isPending ? "Agendando..." : "Confirmar Agendamento"}
-              </Button>
+          <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg mb-4">
+            <div className="text-sm text-gray-600 dark:text-gray-400">
+              Horário selecionado:
             </div>
-          </form>
-        </Form>
-      </DialogContent>
-    </Dialog>
+            <div className="font-medium text-gray-900 dark:text-white">
+              {formatDate(timeSlot.date)} - {formatTimeRange(timeSlot.startTime, timeSlot.endTime)}
+            </div>
+            <div className="text-sm text-gray-600 dark:text-gray-400">
+              {timeSlot.embasa.userName}
+            </div>
+          </div>
+
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
+              <FormField
+                control={form.control}
+                name="clientName"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Nome do Cliente *</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Digite o nome completo" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="ssNumber"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Número da SS *</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Digite o número da SS" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="comments"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Comentários</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        placeholder="Observações adicionais (opcional)"
+                        rows={3}
+                        className="resize-none"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <div className="flex space-x-3 pt-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => onOpenChange(false)}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  type="submit"
+                  className="flex-1"
+                  disabled={bookingMutation.isPending}
+                >
+                  {bookingMutation.isPending ? "Agendando..." : "Confirmar Agendamento"}
+                </Button>
+              </div>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
+      
+      <ErrorNotification 
+        error={error} 
+        onClose={() => setError(null)} 
+      />
+    </>
   );
 }

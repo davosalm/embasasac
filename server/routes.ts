@@ -167,6 +167,72 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Appointments (SAC users)
+  app.post("/api/appointments", authenticate, authorize(['sac']), async (req, res) => {
+    try {
+      const { clientName, ssNumber, comments, timeSlotId } = req.body;
+      
+      const validatedData = insertAppointmentSchema.parse({
+        clientName,
+        ssNumber,
+        comments,
+        timeSlotId,
+        sacCodeId: req.user.id
+      });
+      
+      const appointment = await storage.createAppointment(validatedData);
+      res.status(201).json(appointment);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Dados inválidos", errors: error.errors });
+      }
+      res.status(500).json({ message: "Erro interno do servidor" });
+    }
+  });
+
+  // Confirm appointment (EMBASA users)
+  app.patch("/api/appointments/:id/confirm", authenticate, authorize(['embasa']), async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      
+      // Get appointment to verify if it belongs to this EMBASA unit
+      const appointments = await storage.getAllAppointments();
+      const appointment = appointments.find(apt => apt.id === id);
+      
+      if (!appointment) {
+        return res.status(404).json({ message: "Agendamento não encontrado" });
+      }
+      
+      // Verify if the appointment is for this EMBASA unit
+      if (appointment.timeSlot.embasa.id !== req.user.id) {
+        return res.status(403).json({ message: "Não autorizado a confirmar agendamentos de outra unidade" });
+      }
+      
+      const confirmedAppointment = await storage.confirmAppointment(id);
+      res.json(confirmedAppointment);
+    } catch (error) {
+      res.status(500).json({ message: "Erro interno do servidor" });
+    }
+  });
+
+  // Get appointments
+  app.get("/api/appointments", authenticate, authorize(['admin']), async (req, res) => {
+    try {
+      const appointments = await storage.getAllAppointments();
+      res.json(appointments);
+    } catch (error) {
+      res.status(500).json({ message: "Erro interno do servidor" });
+    }
+  });
+
+  app.get("/api/appointments/sac", authenticate, authorize(['sac']), async (req, res) => {
+    try {
+      const appointments = await storage.getAppointmentsBySacId(req.user.id);
+      res.json(appointments);
+    } catch (error) {
+      res.status(500).json({ message: "Erro interno do servidor" });
+    }
+  });
+
   app.get("/api/appointments/sac", authenticate, authorize(['sac', 'admin']), async (req, res) => {
     try {
       // If admin is accessing, they should provide a sacId

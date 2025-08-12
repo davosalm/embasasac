@@ -10,7 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Clock, Trash2, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
+import { Plus, Clock, Trash2, ChevronLeft, ChevronRight, RefreshCw, CheckCircle } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -110,6 +110,34 @@ export default function EmbasaDashboard() {
     },
   });
 
+  const confirmAppointmentMutation = useMutation({
+    mutationFn: async (appointmentId: number) => {
+      const response = await apiRequest("PATCH", `/api/appointments/${appointmentId}/confirm`);
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Erro ao confirmar agendamento");
+      }
+      
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Agendamento confirmado",
+        description: "O agendamento foi confirmado com sucesso",
+      });
+      
+      refetchAppointments();
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Erro ao confirmar agendamento",
+        description: error.message || "Ocorreu um erro ao confirmar o agendamento",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleDeleteSlot = (id: number) => {
     if (confirm("Tem certeza que deseja remover este horário?")) {
       deleteSlotMutation.mutate(id);
@@ -119,6 +147,10 @@ export default function EmbasaDashboard() {
   const handleDeleteAppointment = (appointment: AppointmentWithDetails) => {
     setAppointmentToDelete(appointment);
     setDeleteDialogOpen(true);
+  };
+
+  const handleConfirmAppointment = (appointmentId: number) => {
+    confirmAppointmentMutation.mutate(appointmentId);
   };
 
   const confirmDeleteAppointment = () => {
@@ -419,14 +451,24 @@ export default function EmbasaDashboard() {
                                   </div>
                                 )}
                               </div>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleDeleteAppointment(apt)}
-                                className="text-red-600 hover:text-red-900 dark:text-red-400"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
+                              <div className="flex space-x-2">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleConfirmAppointment(apt.id)}
+                                  className="text-green-600 hover:text-green-900 dark:text-green-400"
+                                >
+                                  Confirmar
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleDeleteAppointment(apt)}
+                                  className="text-red-600 hover:text-red-900 dark:text-red-400"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
                             </div>
                           </div>
                         ))}
@@ -544,9 +586,27 @@ export default function EmbasaDashboard() {
                         </div>
                       </div>
                       <div className="flex items-center space-x-2">
-                        <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
-                          Agendado
+                        <Badge 
+                          className={`${
+                            appointment.isConfirmed 
+                              ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200" 
+                              : "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200"
+                          }`}
+                        >
+                          {appointment.isConfirmed ? "Confirmado" : "Pendente"}
                         </Badge>
+                        {!appointment.isConfirmed && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleConfirmAppointment(appointment.id)}
+                            className="text-green-600 hover:text-green-900 border-green-200 hover:border-green-300 hover:bg-green-50"
+                            disabled={confirmAppointmentMutation.isPending}
+                          >
+                            <CheckCircle className="h-4 w-4 mr-1" />
+                            Confirmar
+                          </Button>
+                        )}
                         <Button
                           variant="ghost"
                           size="icon"

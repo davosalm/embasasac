@@ -128,10 +128,10 @@ export default function Login() {
               <Calendar className="text-white h-8 w-8" />
             </div>
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-              Sistema EMBASA
+              AgendaÊ - Integração SAC/UR
             </h1>
             <p className="text-gray-600 dark:text-gray-400 mt-2">
-              Agendamento de Visitas Técnicas
+              Sistema de Agendamento de Visitas Técnicas
             </p>
           </div>
         </CardHeader>

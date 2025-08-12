@@ -91,6 +91,8 @@ export class DatabaseStorage implements IStorage {
         client_name TEXT NOT NULL,
         ss_number TEXT NOT NULL,
         comments TEXT,
+        is_confirmed INTEGER DEFAULT 0 NOT NULL,
+        confirmed_at INTEGER,
         created_at INTEGER DEFAULT (strftime('%s', 'now')) NOT NULL,
         FOREIGN KEY (time_slot_id) REFERENCES time_slots(id),
         FOREIGN KEY (sac_code_id) REFERENCES access_codes(id)
@@ -192,12 +194,25 @@ export class DatabaseStorage implements IStorage {
       clientName: data.clientName,
       ssNumber: data.ssNumber,
       comments: data.comments ?? null,
+      isConfirmed: false,
     }).returning();
     
     // Mark time slot as unavailable
     await db.update(timeSlots)
       .set({ isAvailable: false })
       .where(eq(timeSlots.id, data.timeSlotId));
+    
+    return result;
+  }
+
+  async confirmAppointment(id: number): Promise<Appointment> {
+    const [result] = await db.update(appointments)
+      .set({ 
+        isConfirmed: true,
+        confirmedAt: new Date()
+      })
+      .where(eq(appointments.id, id))
+      .returning();
     
     return result;
   }

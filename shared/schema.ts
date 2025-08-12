@@ -28,6 +28,8 @@ export const appointments = sqliteTable("appointments", {
   clientName: text("client_name").notNull(),
   ssNumber: text("ss_number").notNull(),
   comments: text("comments"),
+  isConfirmed: integer("is_confirmed", { mode: "boolean" }).notNull().default(false),
+  confirmedAt: integer("confirmed_at", { mode: "timestamp" }),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull().$defaultFn(() => new Date()),
 });
 
@@ -46,6 +48,7 @@ export const insertTimeSlotSchema = createInsertSchema(timeSlots).omit({
 export const insertAppointmentSchema = createInsertSchema(appointments).omit({
   id: true,
   createdAt: true,
+  confirmedAt: true,
 });
 
 // Types

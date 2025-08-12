@@ -75,8 +75,9 @@ export function CreateSlotModal({ open, onOpenChange }: CreateSlotModalProps) {
         title: "Horário disponibilizado com sucesso",
         description: "O horário foi adicionado ao sistema",
       });
+      // Invalidar automaticamente todas as queries relacionadas
       queryClient.invalidateQueries({ 
-        queryKey: ["/api/time-slots/embasa", currentUser!.id] 
+        queryKey: [`/api/time-slots/embasa?embasaId=${currentUser!.id}`] 
       });
       queryClient.invalidateQueries({ 
         queryKey: ["/api/time-slots/available"] 

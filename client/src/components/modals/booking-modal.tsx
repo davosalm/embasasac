@@ -61,7 +61,7 @@ export function BookingModal({ open, onOpenChange, timeSlot }: BookingModalProps
       const response = await apiRequest("POST", "/api/appointments", {
         ...data,
         timeSlotId: timeSlot!.id,
-        sacId: currentUser!.id,
+        sacCodeId: currentUser!.id,
       });
 
       if (!response.ok) {
@@ -80,7 +80,7 @@ export function BookingModal({ open, onOpenChange, timeSlot }: BookingModalProps
         queryKey: ["/api/time-slots/available"],
       });
       queryClient.invalidateQueries({
-        queryKey: ["/api/appointments/sac", currentUser!.id],
+        queryKey: [`/api/appointments/sac?sacId=${currentUser!.id}`],
       });
       form.reset();
       onOpenChange(false);

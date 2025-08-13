@@ -56,43 +56,45 @@ export function BookingModal({ open, onOpenChange, timeSlot }: BookingModalProps
     },
   });
 
-  const bookingMutation = useMutation({
+  const createAppointmentMutation = useMutation({
     mutationFn: async (data: BookingForm) => {
       const response = await apiRequest("POST", "/api/appointments", {
         ...data,
         timeSlotId: timeSlot!.id,
-        sacId: currentUser!.id,
+        sacCodeId: currentUser!.id,
       });
-
+      
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Erro ao realizar agendamento");
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || "Erro ao criar agendamento");
       }
-
-      return response.status === 204 ? null : await response.json();
+      
+      return response.json();
     },
     onSuccess: () => {
       toast({
-        title: "Agendamento realizado com sucesso",
-        description: "Sua visita técnica foi agendada",
+        title: "Agendamento criado com sucesso",
+        description: "Seu agendamento foi registrado e está aguardando confirmação",
       });
-      queryClient.invalidateQueries({
-        queryKey: ["/api/time-slots/available"],
-      });
-      queryClient.invalidateQueries({
-        queryKey: ["/api/appointments/sac", currentUser!.id],
-      });
+      
+      // Invalidar automaticamente todas as queries relacionadas
+      queryClient.invalidateQueries({ queryKey: ["/api/time-slots/available"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/appointments/sac?sacId=${currentUser?.id}`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/appointments"] });
+      
       form.reset();
       onOpenChange(false);
+      setError(null);
     },
     onError: (error: any) => {
+      console.error("Erro na mutação:", error);
       setError(error.message || "Erro interno do servidor");
     },
   });
 
   const handleSubmit = (data: BookingForm) => {
     if (!timeSlot) return;
-    bookingMutation.mutate(data);
+    createAppointmentMutation.mutate(data);
   };
 
   if (!timeSlot) return null;
@@ -178,9 +180,9 @@ export function BookingModal({ open, onOpenChange, timeSlot }: BookingModalProps
                 <Button
                   type="submit"
                   className="flex-1"
-                  disabled={bookingMutation.isPending}
+                  disabled={createAppointmentMutation.isPending}
                 >
-                  {bookingMutation.isPending ? "Agendando..." : "Confirmar Agendamento"}
+                  {createAppointmentMutation.isPending ? "Agendando..." : "Confirmar Agendamento"}
                 </Button>
               </div>
             </form>

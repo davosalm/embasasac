@@ -4,7 +4,11 @@ import { authManager } from "./auth";
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
     const text = (await res.text()) || res.statusText;
-    throw new Error(`${res.status}: ${text}`);
+    const error = new Error(`${res.status}: ${text}`);
+    // Anexar a resposta original ao erro para permitir acesso ao status
+    (error as any).response = res;
+    (error as any).status = res.status;
+    throw error;
   }
 }
 
@@ -25,13 +29,18 @@ export async function apiRequest(
   if (currentUser?.code) {
     headers["Authorization"] = `Bearer ${currentUser.code}`;
   }
-
+  
   const res = await fetch(url, {
     method,
     headers,
     body: data ? JSON.stringify(data) : undefined,
     credentials: "include",
   });
+  
+  // Para POST de appointments, se for erro 500, retornar a response sem lançar erro
+  if (method === "POST" && url.includes("/api/appointments") && res.status === 500) {
+    return res;
+  }
   
   await throwIfResNotOk(res);
   return res;

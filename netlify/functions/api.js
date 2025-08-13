@@ -187,17 +187,23 @@ app.patch('/api/appointments/:id/confirm', async (req, res) => {
     }
 
     // Confirmar o agendamento
-    const result = await client.execute({
+    await client.execute({
       sql: 'UPDATE appointments SET is_confirmed = 1, confirmed_at = strftime(\'%s\', \'now\') WHERE id = ?',
       args: [appointmentId]
     });
 
-    console.log('Agendamento confirmado:', result);
+    // Buscar o agendamento atualizado para retornar
+    const updatedAppointmentResult = await client.execute({
+      sql: 'SELECT * FROM appointments WHERE id = ?',
+      args: [appointmentId]
+    });
+
+    const updatedAppointment = updatedAppointmentResult.rows[0];
 
     res.json({
       id: appointmentId,
-      isConfirmed: true,
-      confirmedAt: new Date()
+      isConfirmed: Boolean(updatedAppointment.is_confirmed),
+      confirmedAt: updatedAppointment.confirmed_at ? new Date(updatedAppointment.confirmed_at * 1000) : new Date()
     });
   } catch (error) {
     console.error('Erro ao confirmar agendamento:', error);

@@ -53,19 +53,26 @@ export default function EmbasaDashboard() {
 
   const deleteSlotMutation = useMutation({
     mutationFn: async (id: number) => {
-      await apiRequest("DELETE", `/api/time-slots/${id}`);
+      const response = await apiRequest("DELETE", `/api/time-slots/${id}`);
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Erro ao remover horário");
+      }
     },
     onSuccess: () => {
       toast({
         title: "Horário removido com sucesso",
         description: "O horário foi excluído do sistema",
       });
-      queryClient.invalidateQueries({
-        queryKey: ["/api/time-slots/embasa", currentUser!.id],
-      });
-      queryClient.invalidateQueries({
-        queryKey: ["/api/time-slots/available"],
-      });
+      
+      // Invalidar automaticamente todas as queries relacionadas
+      queryClient.invalidateQueries({ queryKey: [`/api/time-slots/embasa?embasaId=${currentUser?.id}`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/time-slots/available"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/appointments"] });
+      
+      // Refetch manual para garantir dados atualizados
+      refetchTimeSlots();
+      refetchAppointments();
     },
     onError: (error: any) => {
       toast({
@@ -80,10 +87,7 @@ export default function EmbasaDashboard() {
     mutationFn: async (appointmentId: number) => {
       if (!currentUser) throw new Error("Usuário não autenticado");
 
-      const response = await apiRequest(
-        "DELETE",
-        `/api/appointments/${appointmentId}?userId=${currentUser.id}&userType=${currentUser.userType}&userName=${encodeURIComponent(currentUser.userName)}`
-      );
+      const response = await apiRequest("DELETE", `/api/appointments/${appointmentId}`);
 
       if (!response.ok) {
         const errorData = await response.json();
@@ -98,9 +102,16 @@ export default function EmbasaDashboard() {
         description: "O agendamento foi cancelado com sucesso",
       });
 
+      // Invalidar automaticamente todas as queries relacionadas
+      queryClient.invalidateQueries({ queryKey: ["/api/appointments"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/time-slots/available"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/time-slots/embasa?embasaId=${currentUser?.id}`] });
+      
+      // Refetch manual para garantir dados atualizados
       refetchTimeSlots();
       refetchAppointments();
       setAppointmentToDelete(null);
+      setDeleteDialogOpen(false);
     },
     onError: (error: any) => {
       toast({
@@ -128,9 +139,14 @@ export default function EmbasaDashboard() {
         description: "O agendamento foi confirmado com sucesso",
       });
       
-      // Atualizar automaticamente todos os dados relacionados
+      // Invalidar automaticamente todas as queries relacionadas
       queryClient.invalidateQueries({ queryKey: ["/api/appointments"] });
       queryClient.invalidateQueries({ queryKey: ["/api/time-slots/available"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/time-slots/embasa?embasaId=${currentUser?.id}`] });
+      
+      // Refetch manual para garantir dados atualizados
+      refetchTimeSlots();
+      refetchAppointments();
     },
     onError: (error: any) => {
       toast({

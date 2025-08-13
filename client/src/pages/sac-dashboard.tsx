@@ -83,7 +83,13 @@ export default function SacDashboard() {
       // Invalidar automaticamente todas as queries relacionadas
       queryClient.invalidateQueries({ queryKey: ["/api/time-slots/available"] });
       queryClient.invalidateQueries({ queryKey: [`/api/appointments/sac?sacId=${currentUser?.id}`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/appointments"] });
+      
+      // Refetch manual para garantir dados atualizados
+      refetchSlots();
+      refetchAppointments();
       setAppointmentToDelete(null);
+      setDeleteDialogOpen(false);
     },
     onError: (error: any) => {
       toast({
@@ -99,11 +105,6 @@ export default function SacDashboard() {
     setBookingModalOpen(true);
   };
 
-  const refreshData = () => {
-    refetchSlots();
-    refetchAppointments();
-  };
-
   const handleDeleteAppointment = (appointment: AppointmentWithDetails) => {
     setAppointmentToDelete(appointment);
     setDeleteDialogOpen(true);
@@ -112,8 +113,15 @@ export default function SacDashboard() {
   const confirmDeleteAppointment = () => {
     if (appointmentToDelete) {
       deleteAppointmentMutation.mutate(appointmentToDelete.id);
-      setDeleteDialogOpen(false);
     }
+  };
+
+  const refreshData = () => {
+    // Invalidar queries e refazer fetch
+    queryClient.invalidateQueries({ queryKey: ["/api/time-slots/available"] });
+    queryClient.invalidateQueries({ queryKey: [`/api/appointments/sac?sacId=${currentUser?.id}`] });
+    refetchSlots();
+    refetchAppointments();
   };
 
   // Get unique EMBASA units for filtering

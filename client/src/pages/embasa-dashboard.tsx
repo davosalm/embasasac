@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Header } from "@/components/header";
 import { CreateSlotModal } from "@/components/modals/create-slot-modal";
-import { CreateMultipleSlotsModal } from "@/components/modals/create-multiple-slots-modal";
+import { CreateSlotsSimplifiedModal } from "@/components/modals/create-slots-simplified-modal";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
@@ -33,7 +33,7 @@ import type { TimeSlot, AppointmentWithDetails } from "@shared/schema";
 
 export default function EmbasaDashboard() {
   const [createSlotModalOpen, setCreateSlotModalOpen] = useState(false);
-  const [createMultipleSlotsModalOpen, setCreateMultipleSlotsModalOpen] = useState(false);
+  const [createSimplifiedModalOpen, setCreateSimplifiedModalOpen] = useState(false);
   // Initialize to current month (first day of current month)
   const [currentMonth, setCurrentMonth] = useState(() => {
     const today = new Date();
@@ -322,11 +322,11 @@ export default function EmbasaDashboard() {
                 </Select>
               </div>
               <Button
-                onClick={() => setCreateMultipleSlotsModalOpen(true)}
+                onClick={() => setCreateSimplifiedModalOpen(true)}
                 className="flex items-center space-x-2"
               >
                 <Plus className="h-4 w-4" />
-                <span>Criar Múltiplos Horários</span>
+                <span>Disponibilizar Horários</span>
               </Button>
               <Button
                 onClick={() => setCreateSlotModalOpen(true)}
@@ -851,7 +851,7 @@ export default function EmbasaDashboard() {
       </main>
 
       <CreateSlotModal open={createSlotModalOpen} onOpenChange={setCreateSlotModalOpen} />
-      <CreateMultipleSlotsModal open={createMultipleSlotsModalOpen} onOpenChange={setCreateMultipleSlotsModalOpen} />
+      <CreateSlotsSimplifiedModal open={createSimplifiedModalOpen} onOpenChange={setCreateSimplifiedModalOpen} />
 
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>

@@ -47,17 +47,10 @@ export default function SacDashboard() {
     isLoading: slotsLoading,
     refetch: refetchSlots 
   } = useQuery<TimeSlotWithEmbasa[]>({
-    queryKey: ["/api/time-slots/available", { includePast: showPastDates }],
+    queryKey: [showPastDates ? "/api/time-slots/available?includePast=true" : "/api/time-slots/available"],
   });
   
-  const { 
-    data: pastSlots = [], 
-    isLoading: pastSlotsLoading,
-    refetch: refetchPastSlots 
-  } = useQuery<TimeSlotWithEmbasa[]>({
-    queryKey: ["/api/time-slots/past"],
-    enabled: showPastDates,
-  });
+  // pastSlots não é mais necessário, usamos includePast na query anterior
   
   const { 
     data: myAppointments = [], 
@@ -139,8 +132,8 @@ export default function SacDashboard() {
     new Set(availableSlots.map(slot => slot.embasa.userName))
   );
 
-  // Filter slots based on selected EMBASA unit and past dates
-  const slotsToDisplay = showPastDates ? [...availableSlots, ...pastSlots] : availableSlots;
+  // Filter slots based on selected EMBASA unit
+  const slotsToDisplay = availableSlots;
   const filteredSlots = filterEmbasa === "all" 
     ? slotsToDisplay
     : slotsToDisplay.filter(slot => slot.embasa.userName === filterEmbasa);
@@ -169,7 +162,7 @@ export default function SacDashboard() {
                 variant={showPastDates ? "default" : "outline"}
                 className="flex items-center space-x-2"
               >
-                <span>{showPastDates ? "Ocultando datas passadas" : "Ver datas passadas"}</span>
+                <span>{showPastDates ? "Mostrando datas passadas" : "Ver datas passadas"}</span>
               </Button>
               
               <Button

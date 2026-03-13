@@ -185,7 +185,9 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getPastTimeSlots(): Promise<TimeSlotWithEmbasa[]> {
-    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
+    // Get today's date in local timezone (YYYY-MM-DD format)
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`; // YYYY-MM-DD format
     
     const result = await db.select({
       id: timeSlots.id,

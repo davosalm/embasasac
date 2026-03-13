@@ -132,8 +132,22 @@ export default function SacDashboard() {
     new Set(availableSlots.map(slot => slot.embasa.userName))
   );
 
-  // Filter slots based on selected EMBASA unit
-  const slotsToDisplay = availableSlots;
+  // Filter slots based on selected EMBASA unit and hide previous months
+  const now = new Date();
+  const currentMonth = now.getMonth();
+  const currentYear = now.getFullYear();
+  
+  const slotsToDisplay = availableSlots.filter(slot => {
+    const slotDate = new Date(slot.date);
+    const slotMonth = slotDate.getMonth();
+    const slotYear = slotDate.getFullYear();
+    
+    // Hide if it's from a previous month
+    if (slotYear < currentYear) return false;
+    if (slotYear === currentYear && slotMonth < currentMonth) return false;
+    
+    return true;
+  });
   const filteredSlots = filterEmbasa === "all" 
     ? slotsToDisplay
     : slotsToDisplay.filter(slot => slot.embasa.userName === filterEmbasa);

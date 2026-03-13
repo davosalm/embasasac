@@ -579,13 +579,14 @@ export default function EmbasaDashboard() {
                           {slot.isAvailable ? "Disponível" : "Ocupado"}
                         </Badge>
                         <Button
-                          variant="ghost"
-                          size="icon"
+                          variant="outline"
+                          size="sm"
                           onClick={() => handleDeleteSlot(slot.id)}
                           disabled={deleteSlotMutation.isPending}
-                          className="text-red-600 hover:text-red-900 dark:text-red-400"
+                          className="text-red-600 hover:text-red-900 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20"
                         >
-                          <Trash2 className="h-4 w-4" />
+                          <Trash2 className="h-4 w-4 mr-1" />
+                          Remover
                         </Button>
                       </div>
                     </div>

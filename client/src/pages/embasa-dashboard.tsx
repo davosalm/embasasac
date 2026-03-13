@@ -43,6 +43,9 @@ export default function EmbasaDashboard() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [appointmentToDelete, setAppointmentToDelete] = useState<AppointmentWithDetails | null>(null);
+  const [selectedSlots, setSelectedSlots] = useState<Set<number>>(new Set());
+  const [bulkDeleteMode, setBulkDeleteMode] = useState(false);
+  const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false);
 
   const { toast } = useToast();
   const { currentUser } = useAuth();
@@ -163,10 +166,59 @@ export default function EmbasaDashboard() {
     },
   });
 
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (ids: number[]) => {
+      const response = await apiRequest("POST", "/api/time-slots/bulk-delete", { ids });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Erro ao excluir horários");
+      }
+      
+      return response.json();
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Horários removidos",
+        description: `${data.deletedCount} horários foram removidos com sucesso`,
+      });
+      
+      queryClient.invalidateQueries({ queryKey: [`/api/time-slots/embasa?embasaId=${currentUser?.id}`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/time-slots/available"] });
+      
+      refetchTimeSlots();
+      setSelectedSlots(new Set());
+      setBulkDeleteMode(false);
+      setBulkDeleteDialogOpen(false);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Erro ao remover horários",
+        description: error.message || "Ocorreu um erro ao remover os horários",
+        variant: "destructive",
+      });
+    },
+  });
+
   const handleDeleteSlot = (id: number) => {
     if (confirm("Tem certeza que deseja remover este horário?")) {
       deleteSlotMutation.mutate(id);
     }
+  };
+
+  const handleSlotToggle = (id: number) => {
+    const newSelected = new Set(selectedSlots);
+    if (newSelected.has(id)) {
+      newSelected.delete(id);
+    } else {
+      newSelected.add(id);
+    }
+    setSelectedSlots(newSelected);
+  };
+
+  const handleBulkDelete = () => {
+    if (selectedSlots.size === 0) return;
+    bulkDeleteMutation.mutate(Array.from(selectedSlots));
   };
 
   const handleDeleteAppointment = (appointment: AppointmentWithDetails) => {
@@ -534,15 +586,44 @@ export default function EmbasaDashboard() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle>Horários Disponibilizados</CardTitle>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => refetchTimeSlots()}
-                className="flex items-center space-x-1"
-              >
-                <RefreshCw className="h-4 w-4" />
-                <span>Atualizar horários</span>
-              </Button>
+              <div className="flex items-center space-x-2">
+                {bulkDeleteMode && selectedSlots.size > 0 && (
+                  <>
+                    <span className="text-sm text-gray-600 dark:text-gray-400">
+                      {selectedSlots.size} selecionado(s)
+                    </span>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => setBulkDeleteDialogOpen(true)}
+                      className="flex items-center space-x-1"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      <span>Remover {selectedSlots.size}</span>
+                    </Button>
+                  </>
+                )}
+                <Button
+                  variant={bulkDeleteMode ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => {
+                    setBulkDeleteMode(!bulkDeleteMode);
+                    setSelectedSlots(new Set());
+                  }}
+                  className="flex items-center space-x-1"
+                >
+                  {bulkDeleteMode ? "Cancelar seleção" : "Selecionar múltiplos"}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => refetchTimeSlots()}
+                  className="flex items-center space-x-1"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  <span>Atualizar</span>
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               {isLoading ? (
@@ -562,6 +643,14 @@ export default function EmbasaDashboard() {
                   {timeSlots.map((slot) => (
                     <div key={slot.id} className="py-6 flex items-center justify-between">
                       <div className="flex items-center space-x-4">
+                        {bulkDeleteMode && (
+                          <input
+                            type="checkbox"
+                            checked={selectedSlots.has(slot.id)}
+                            onChange={() => handleSlotToggle(slot.id)}
+                            className="w-5 h-5 cursor-pointer"
+                          />
+                        )}
                         <div className="w-12 h-12 bg-primary-100 dark:bg-primary-900 rounded-lg flex items-center justify-center">
                           <Clock className="text-primary-600 dark:text-primary-400 h-5 w-5" />
                         </div>
@@ -882,6 +971,30 @@ export default function EmbasaDashboard() {
               onClick={confirmDeleteAppointment}
             >
               Excluir Agendamento
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Bulk Delete Dialog */}
+      <AlertDialog open={bulkDeleteDialogOpen} onOpenChange={setBulkDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remover {selectedSlots.size} horários?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja remover {selectedSlots.size} horário(s)?
+              <br />
+              Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700"
+              onClick={handleBulkDelete}
+              disabled={bulkDeleteMutation.isPending}
+            >
+              {bulkDeleteMutation.isPending ? "Removendo..." : "Remover"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

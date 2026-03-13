@@ -132,11 +132,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { date, startTime } = req.body;
       
+      // Validate input
+      if (!date || !startTime) {
+        return res.status(400).json({ message: "Data e horário são obrigatórios" });
+      }
+      
       // Use the current embasa user's ID directly
       const embasaCodeId = req.user.id;
       
+      if (!embasaCodeId) {
+        return res.status(401).json({ message: "Usuário não autenticado" });
+      }
+      
+      // Validate date format (YYYY-MM-DD)
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+        return res.status(400).json({ message: "Formato de data inválido. Use YYYY-MM-DD" });
+      }
+      
+      // Validate time format (HH:MM)
+      if (!/^\d{2}:\d{2}$/.test(startTime)) {
+        return res.status(400).json({ message: "Formato de horário inválido. Use HH:MM" });
+      }
+      
       // Calculate end time (2 hours later)
       const [hours, minutes] = startTime.split(':').map(Number);
+      
+      if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
+        return res.status(400).json({ message: "Horário inválido" });
+      }
+      
       const endHours = hours + 2;
       const endTime = `${endHours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
       
@@ -152,9 +176,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(201).json(timeSlot);
     } catch (error) {
       if (error instanceof z.ZodError) {
+        console.error("Validation error:", error.errors);
         return res.status(400).json({ message: "Dados inválidos", errors: error.errors });
       }
-      res.status(500).json({ message: "Erro interno do servidor" });
+      console.error("Error creating time slot:", error);
+      res.status(500).json({ message: "Erro interno do servidor", error: error instanceof Error ? error.message : "Unknown error" });
     }
   });
 
@@ -168,14 +194,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Horário não encontrado" });
       }
       
+      if (isNaN(id)) {
+        return res.status(400).json({ message: "ID inválido" });
+      }
+      
       if (timeSlot.embasaCodeId !== req.user.id) {
         return res.status(403).json({ message: "Não autorizado a excluir horários de outra unidade EMBASA" });
       }
       
+      // Allow deletion of occupied slots too
       await storage.deleteTimeSlot(id);
       res.status(204).send();
     } catch (error) {
-      res.status(500).json({ message: "Erro interno do servidor" });
+      console.error("Error deleting time slot:", error);
+      res.status(500).json({ message: "Erro interno do servidor", error: error instanceof Error ? error.message : "Unknown error" });
+    }
+  });
+
+  // Bulk delete time slots
+  app.post("/api/time-slots/bulk-delete", authenticate, authorize(['embasa']), async (req, res) => {
+    try {
+      const { ids } = req.body;
+      
+      if (!Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({ message: "IDs inválidos" });
+      }
+      
+      // Verify all slots belong to current user
+      const slots = await Promise.all(ids.map(id => storage.getTimeSlotById(id)));
+      
+      for (const slot of slots) {
+        if (!slot) {
+          return res.status(404).json({ message: "Um ou mais horários não encontrados" });
+        }
+        if (slot.embasaCodeId !== req.user.id) {
+          return res.status(403).json({ message: "Não autorizado a excluir horários de outra unidade EMBASA" });
+        }
+      }
+      
+      // Delete all slots
+      let deletedCount = 0;
+      for (const id of ids) {
+        try {
+          await storage.deleteTimeSlot(id);
+          deletedCount++;
+        } catch (error) {
+          console.error(`Erro ao deletar horário ${id}:`, error);
+        }
+      }
+      
+      res.status(200).json({ message: `${deletedCount} horários deletados`, deletedCount });
+    } catch (error) {
+      console.error("Error bulk deleting time slots:", error);
+      res.status(500).json({ message: "Erro interno do servidor", error: error instanceof Error ? error.message : "Unknown error" });
     }
   });
 

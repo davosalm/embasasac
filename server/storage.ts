@@ -24,7 +24,8 @@ export interface IStorage {
   // Time Slots
   createTimeSlot(data: InsertTimeSlot): Promise<TimeSlot>;
   getTimeSlotsByEmbasaId(embasaCodeId: number): Promise<TimeSlot[]>;
-  getAvailableTimeSlots(): Promise<TimeSlotWithEmbasa[]>;
+  getAvailableTimeSlots(includePast?: boolean): Promise<TimeSlotWithEmbasa[]>;
+  getPastTimeSlots(): Promise<TimeSlotWithEmbasa[]>;
   getTimeSlotById(id: number): Promise<TimeSlot | undefined>;
   deleteTimeSlot(id: number): Promise<void>;
   
@@ -148,7 +149,9 @@ export class DatabaseStorage implements IStorage {
       .where(eq(timeSlots.embasaCodeId, embasaCodeId));
   }
 
-  async getAvailableTimeSlots(): Promise<TimeSlotWithEmbasa[]> {
+  async getAvailableTimeSlots(includePast: boolean = false): Promise<TimeSlotWithEmbasa[]> {
+    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
+    
     const result = await db.select({
       id: timeSlots.id,
       embasaCodeId: timeSlots.embasaCodeId,
@@ -170,7 +173,45 @@ export class DatabaseStorage implements IStorage {
     .innerJoin(accessCodes, eq(timeSlots.embasaCodeId, accessCodes.id))
     .where(eq(timeSlots.isAvailable, true));
     
-    return result.map(row => ({
+    // Filter by date if not including past dates
+    const filtered = includePast 
+      ? result 
+      : result.filter(row => row.date >= today);
+    
+    return filtered.map(row => ({
+      ...row,
+      embasa: row.embasa
+    }));
+  }
+
+  async getPastTimeSlots(): Promise<TimeSlotWithEmbasa[]> {
+    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
+    
+    const result = await db.select({
+      id: timeSlots.id,
+      embasaCodeId: timeSlots.embasaCodeId,
+      date: timeSlots.date,
+      startTime: timeSlots.startTime,
+      endTime: timeSlots.endTime,
+      isAvailable: timeSlots.isAvailable,
+      createdAt: timeSlots.createdAt,
+      embasa: {
+        id: accessCodes.id,
+        code: accessCodes.code,
+        userType: accessCodes.userType,
+        userName: accessCodes.userName,
+        isActive: accessCodes.isActive,
+        createdAt: accessCodes.createdAt,
+      }
+    })
+    .from(timeSlots)
+    .innerJoin(accessCodes, eq(timeSlots.embasaCodeId, accessCodes.id))
+    .where(eq(timeSlots.isAvailable, true));
+    
+    // Filter only past dates
+    const filtered = result.filter(row => row.date < today);
+    
+    return filtered.map(row => ({
       ...row,
       embasa: row.embasa
     }));

@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Header } from "@/components/header";
 import { CreateSlotModal } from "@/components/modals/create-slot-modal";
+import { CreateMultipleSlotsModal } from "@/components/modals/create-multiple-slots-modal";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
@@ -32,6 +33,7 @@ import type { TimeSlot, AppointmentWithDetails } from "@shared/schema";
 
 export default function EmbasaDashboard() {
   const [createSlotModalOpen, setCreateSlotModalOpen] = useState(false);
+  const [createMultipleSlotsModalOpen, setCreateMultipleSlotsModalOpen] = useState(false);
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [filterSac, setFilterSac] = useState<string>("all");
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
@@ -298,7 +300,15 @@ export default function EmbasaDashboard() {
                 </Select>
               </div>
               <Button
+                onClick={() => setCreateMultipleSlotsModalOpen(true)}
+                className="flex items-center space-x-2"
+              >
+                <Plus className="h-4 w-4" />
+                <span>Criar Múltiplos Horários</span>
+              </Button>
+              <Button
                 onClick={() => setCreateSlotModalOpen(true)}
+                variant="outline"
                 className="flex items-center space-x-2"
               >
                 <Plus className="h-4 w-4" />
@@ -819,6 +829,7 @@ export default function EmbasaDashboard() {
       </main>
 
       <CreateSlotModal open={createSlotModalOpen} onOpenChange={setCreateSlotModalOpen} />
+      <CreateMultipleSlotsModal open={createMultipleSlotsModalOpen} onOpenChange={setCreateMultipleSlotsModalOpen} />
 
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>

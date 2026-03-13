@@ -36,6 +36,7 @@ export default function SacDashboard() {
   const [filterEmbasa, setFilterEmbasa] = useState<string>("all");
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [appointmentToDelete, setAppointmentToDelete] = useState<AppointmentWithDetails | null>(null);
+  const [showPastDates, setShowPastDates] = useState(false);
   
   const { currentUser } = useAuth();
   const queryClient = useQueryClient();
@@ -46,7 +47,16 @@ export default function SacDashboard() {
     isLoading: slotsLoading,
     refetch: refetchSlots 
   } = useQuery<TimeSlotWithEmbasa[]>({
-    queryKey: ["/api/time-slots/available"],
+    queryKey: ["/api/time-slots/available", { includePast: showPastDates }],
+  });
+  
+  const { 
+    data: pastSlots = [], 
+    isLoading: pastSlotsLoading,
+    refetch: refetchPastSlots 
+  } = useQuery<TimeSlotWithEmbasa[]>({
+    queryKey: ["/api/time-slots/past"],
+    enabled: showPastDates,
   });
   
   const { 
@@ -129,10 +139,18 @@ export default function SacDashboard() {
     new Set(availableSlots.map(slot => slot.embasa.userName))
   );
 
-  // Filter slots based on selected EMBASA unit
+  // Filter slots based on selected EMBASA unit and past dates
+  const slotsToDisplay = showPastDates ? [...availableSlots, ...pastSlots] : availableSlots;
   const filteredSlots = filterEmbasa === "all" 
-    ? availableSlots 
-    : availableSlots.filter(slot => slot.embasa.userName === filterEmbasa);
+    ? slotsToDisplay
+    : slotsToDisplay.filter(slot => slot.embasa.userName === filterEmbasa);
+  
+  // Sort slots by date
+  const sortedSlots = [...filteredSlots].sort((a, b) => {
+    const dateA = new Date(a.date).getTime();
+    const dateB = new Date(b.date).getTime();
+    return showPastDates ? dateB - dateA : dateA - dateB; // Reverse order for past dates
+  });
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
@@ -146,6 +164,14 @@ export default function SacDashboard() {
             </h2>
             
             <div className="flex items-center space-x-4">
+              <Button
+                onClick={() => setShowPastDates(!showPastDates)}
+                variant={showPastDates ? "default" : "outline"}
+                className="flex items-center space-x-2"
+              >
+                <span>{showPastDates ? "Ocultando datas passadas" : "Ver datas passadas"}</span>
+              </Button>
+              
               <Button
                 onClick={refreshData}
                 variant="outline"
@@ -199,20 +225,20 @@ export default function SacDashboard() {
             <TabsContent value="available">
               {/* Available Appointments */}
               <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                {slotsLoading ? (
+                {slotsLoading || (showPastDates && pastSlotsLoading) ? (
                   <div className="col-span-full text-center py-12">
                     <div className="text-gray-500 dark:text-gray-400">
                       Carregando horários disponíveis...
                     </div>
                   </div>
-                ) : filteredSlots.length === 0 ? (
+                ) : sortedSlots.length === 0 ? (
                   <div className="col-span-full text-center py-12">
                     <div className="text-gray-500 dark:text-gray-400">
                       Nenhum horário disponível no momento
                     </div>
                   </div>
                 ) : (
-                  filteredSlots.map((slot) => (
+                  sortedSlots.map((slot) => (
                     <Card
                       key={slot.id}
                       className="hover:shadow-lg transition-shadow cursor-pointer border-2 border-transparent hover:border-primary-200 dark:hover:border-primary-800"

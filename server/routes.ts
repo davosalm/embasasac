@@ -73,7 +73,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // This route is accessible to both SAC and EMBASA users for different purposes
   app.get("/api/time-slots/available", authenticate, authorize(['sac', 'embasa', 'admin']), async (req, res) => {
     try {
-      const timeSlots = await storage.getAvailableTimeSlots();
+      const includePast = req.query.includePast === 'true';
+      const timeSlots = await storage.getAvailableTimeSlots(includePast);
+      res.json(timeSlots);
+    } catch (error) {
+      res.status(500).json({ message: "Erro interno do servidor" });
+    }
+  });
+
+  // Get past time slots
+  app.get("/api/time-slots/past", authenticate, authorize(['sac', 'embasa', 'admin']), async (req, res) => {
+    try {
+      const timeSlots = await storage.getPastTimeSlots();
       res.json(timeSlots);
     } catch (error) {
       res.status(500).json({ message: "Erro interno do servidor" });
@@ -143,6 +154,77 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (error instanceof z.ZodError) {
         return res.status(400).json({ message: "Dados inválidos", errors: error.errors });
       }
+      res.status(500).json({ message: "Erro interno do servidor" });
+    }
+  });
+
+  // Create multiple time slots at once
+  app.post("/api/time-slots/batch", authenticate, authorize(['embasa']), async (req, res) => {
+    try {
+      const { startDate, endDate, times, daysOfWeek } = req.body;
+      const embasaCodeId = req.user.id;
+      
+      // Validate input
+      if (!startDate || !endDate || !times || !Array.isArray(times) || times.length === 0) {
+        return res.status(400).json({ message: "Dados inválidos" });
+      }
+      
+      if (!daysOfWeek || !Array.isArray(daysOfWeek) || daysOfWeek.length === 0) {
+        return res.status(400).json({ message: "Selecione pelo menos um dia da semana" });
+      }
+      
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      
+      if (start > end) {
+        return res.status(400).json({ message: "Data inicial deve ser anterior à data final" });
+      }
+      
+      const createdSlots = [];
+      const current = new Date(start);
+      
+      // Iterate through each day in the range
+      while (current <= end) {
+        const dayOfWeek = current.getDay();
+        
+        // Check if this day of week is selected (convert 0-6 to 1-7 where 1=Monday)
+        const adjustedDay = dayOfWeek === 0 ? 7 : dayOfWeek;
+        
+        if (daysOfWeek.includes(adjustedDay)) {
+          // Create a slot for each time
+          for (const time of times) {
+            const [hours, minutes] = time.split(':').map(Number);
+            const endHours = hours + 2;
+            const endTime = `${endHours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+            
+            const dateStr = current.toISOString().split('T')[0];
+            
+            const validatedData = insertTimeSlotSchema.parse({
+              date: dateStr,
+              startTime: time,
+              endTime,
+              embasaCodeId,
+              isAvailable: true
+            });
+            
+            const slot = await storage.createTimeSlot(validatedData);
+            createdSlots.push(slot);
+          }
+        }
+        
+        // Move to next day
+        current.setDate(current.getDate() + 1);
+      }
+      
+      res.status(201).json({ 
+        message: `${createdSlots.length} horários criados com sucesso`,
+        slots: createdSlots 
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Dados inválidos", errors: error.errors });
+      }
+      console.error("Error creating batch slots:", error);
       res.status(500).json({ message: "Erro interno do servidor" });
     }
   });

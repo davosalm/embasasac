@@ -28,8 +28,10 @@ import { ErrorNotification } from "@/components/ui/error-notification";
 
 const createSlotSchema = z.object({
   date: z.string().min(1, "Data é obrigatória").refine((date) => {
-    const selectedDate = new Date(date);
-    const dayOfWeek = selectedDate.getDay();
+    // Parse date as YYYY-MM-DD and get day of week using UTC to avoid timezone issues
+    const [year, month, day] = date.split('-').map(Number);
+    const selectedDate = new Date(Date.UTC(year, month - 1, day));
+    const dayOfWeek = selectedDate.getUTCDay();
     return dayOfWeek !== 0 && dayOfWeek !== 6; // 0 = domingo, 6 = sábado
   }, "Não é possível criar horários aos sábados e domingos"),
   startTime: z.string().min(1, "Horário é obrigatório"),

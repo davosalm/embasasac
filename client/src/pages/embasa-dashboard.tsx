@@ -34,7 +34,11 @@ import type { TimeSlot, AppointmentWithDetails } from "@shared/schema";
 export default function EmbasaDashboard() {
   const [createSlotModalOpen, setCreateSlotModalOpen] = useState(false);
   const [createMultipleSlotsModalOpen, setCreateMultipleSlotsModalOpen] = useState(false);
-  const [currentMonth, setCurrentMonth] = useState(new Date());
+  // Initialize to current month (first day of current month)
+  const [currentMonth, setCurrentMonth] = useState(() => {
+    const today = new Date();
+    return new Date(today.getFullYear(), today.getMonth(), 1);
+  });
   const [filterSac, setFilterSac] = useState<string>("all");
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -193,6 +197,11 @@ export default function EmbasaDashboard() {
     const lastDay = new Date(year, month + 1, 0);
     const daysInMonth = lastDay.getDate();
     const startingDayOfWeek = firstDay.getDay();
+    
+    // Get today's date at midnight UTC
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayStr = today.toISOString().split('T')[0];
 
     const days = [];
 
@@ -206,6 +215,13 @@ export default function EmbasaDashboard() {
       const dateStr = `${year}-${(month + 1).toString().padStart(2, "0")}-${day
         .toString()
         .padStart(2, "0")}`;
+      
+      // Only show dates from today onwards
+      if (dateStr < todayStr) {
+        days.push(null);
+        continue;
+      }
+      
       const slotsForDay = timeSlots.filter((slot) => slot.date === dateStr);
       const appointmentsForDay = allAppointments.filter(
         (apt) =>
@@ -241,7 +257,13 @@ export default function EmbasaDashboard() {
   const navigateMonth = (direction: "prev" | "next") => {
     setCurrentMonth((prev) => {
       const newDate = new Date(prev);
+      const today = new Date();
+      
       if (direction === "prev") {
+        // Don't allow navigating to past months
+        if (prev.getMonth() === today.getMonth() && prev.getFullYear() === today.getFullYear()) {
+          return prev;
+        }
         newDate.setMonth(prev.getMonth() - 1);
       } else {
         newDate.setMonth(prev.getMonth() + 1);

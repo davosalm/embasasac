@@ -128,37 +128,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/time-slots", authenticate, authorize(['embasa']), async (req, res) => {
-    try {
-      const { date, startTime } = req.body;
-      
-      // Use the current embasa user's ID directly
-      const embasaCodeId = req.user.id;
-      
-      // Calculate end time (2 hours later)
-      const [hours, minutes] = startTime.split(':').map(Number);
-      const endHours = hours + 2;
-      const endTime = `${endHours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
-      
-      const validatedData = insertTimeSlotSchema.parse({
-        date,
-        startTime,
-        endTime,
-        embasaCodeId,
-        isAvailable: true
-      });
-      
-      const timeSlot = await storage.createTimeSlot(validatedData);
-      res.status(201).json(timeSlot);
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        return res.status(400).json({ message: "Dados inválidos", errors: error.errors });
-      }
-      res.status(500).json({ message: "Erro interno do servidor" });
-    }
-  });
-
-  // Create multiple time slots at once
+  // Create multiple time slots at once - MUST BE BEFORE POST /api/time-slots
   app.post("/api/time-slots/batch", authenticate, authorize(['embasa']), async (req, res) => {
     try {
       const { startDate, endDate, times, daysOfWeek } = req.body;
@@ -225,6 +195,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Dados inválidos", errors: error.errors });
       }
       console.error("Error creating batch slots:", error);
+      res.status(500).json({ message: "Erro interno do servidor" });
+    }
+  });
+
+  app.post("/api/time-slots", authenticate, authorize(['embasa']), async (req, res) => {
+    try {
+      const { date, startTime } = req.body;
+      
+      // Use the current embasa user's ID directly
+      const embasaCodeId = req.user.id;
+      
+      // Calculate end time (2 hours later)
+      const [hours, minutes] = startTime.split(':').map(Number);
+      const endHours = hours + 2;
+      const endTime = `${endHours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+      
+      const validatedData = insertTimeSlotSchema.parse({
+        date,
+        startTime,
+        endTime,
+        embasaCodeId,
+        isAvailable: true
+      });
+      
+      const timeSlot = await storage.createTimeSlot(validatedData);
+      res.status(201).json(timeSlot);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: "Dados inválidos", errors: error.errors });
+      }
       res.status(500).json({ message: "Erro interno do servidor" });
     }
   });

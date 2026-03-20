@@ -1,14 +1,16 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
-    <meta name="description" content="AgendaÊ - Sistema de Integração SAC/UR para agendamento de visitas técnicas" />
-    <title>AgendaÊ - Integração SAC/UR</title>
-    <link rel="icon" type="image/x-icon" href="/favicon.ico">
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
-</html>
+import { createClient } from "@libsql/client";
+import { drizzle } from "drizzle-orm/libsql";
+import * as schema from "@shared/schema";
+
+if (!process.env.TURSO_DATABASE_URL || !process.env.TURSO_AUTH_TOKEN) {
+  throw new Error(
+    "TURSO_DATABASE_URL and TURSO_AUTH_TOKEN must be set. Database credentials are required.",
+  );
+}
+
+export const client = createClient({
+  url: process.env.TURSO_DATABASE_URL,
+  authToken: process.env.TURSO_AUTH_TOKEN,
+});
+
+export const db = drizzle(client, { schema });

@@ -4,7 +4,7 @@ import { storage } from "./storage";
 import { authenticate, authorize } from "./middlewares";
 import { insertAccessCodeSchema, insertTimeSlotSchema, insertAppointmentSchema, appointments, timeSlots } from "@shared/schema";
 import { z } from "zod";
-import { db } from "./db";
+import { db } from "./db.js";
 import { eq } from "drizzle-orm";
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -180,6 +180,100 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Dados inválidos", errors: error.errors });
       }
       console.error("Error creating time slot:", error);
+      res.status(500).json({ message: "Erro interno do servidor", error: error instanceof Error ? error.message : "Unknown error" });
+    }
+  });
+
+  // Batch create time slots
+  app.post("/api/time-slots/batch", authenticate, authorize(['embasa']), async (req, res) => {
+    try {
+      const { startDate, endDate, times, daysOfWeek, embasaCodeId } = req.body;
+      
+      // Validate input
+      if (!startDate || !endDate || !times || !daysOfWeek) {
+        return res.status(400).json({ message: "startDate, endDate, times e daysOfWeek são obrigatórios" });
+      }
+      
+      if (!Array.isArray(times) || times.length === 0) {
+        return res.status(400).json({ message: "times deve ser um array não vazio" });
+      }
+      
+      if (!Array.isArray(daysOfWeek) || daysOfWeek.length === 0) {
+        return res.status(400).json({ message: "daysOfWeek deve ser um array não vazio" });
+      }
+      
+      // Use the current embasa user's ID (ignore embasaCodeId from request for security)
+      const userId = req.user.id;
+      
+      // Parse dates
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      
+      if (start > end) {
+        return res.status(400).json({ message: "Data inicial deve ser anterior à data final" });
+      }
+      
+      // Generate all dates in range
+      const createdSlots = [];
+      let currentDate = new Date(start);
+      
+      while (currentDate <= end) {
+        const dayOfWeek = currentDate.getDay();
+        
+        // Check if this day of week is selected (0=Sunday, 1=Monday, etc.)
+        if (daysOfWeek.includes(dayOfWeek)) {
+          const dateString = currentDate.toISOString().split('T')[0]; // YYYY-MM-DD
+          
+          // Create a time slot for each time
+          for (const time of times) {
+            // Validate time format
+            if (!/^\d{2}:\d{2}$/.test(time)) {
+              return res.status(400).json({ message: `Formato de horário inválido: ${time}. Use HH:MM` });
+            }
+            
+            const [hours, minutes] = time.split(':').map(Number);
+            
+            if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
+              return res.status(400).json({ message: `Horário inválido: ${time}` });
+            }
+            
+            // Calculate end time (2 hours later)
+            const endHours = hours + 2;
+            const endTime = `${endHours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+            
+            try {
+              const validatedData = insertTimeSlotSchema.parse({
+                date: dateString,
+                startTime: time,
+                endTime: endTime,
+                embasaCodeId: userId,
+                isAvailable: true
+              });
+              
+              const timeSlot = await storage.createTimeSlot(validatedData);
+              createdSlots.push(timeSlot);
+            } catch (error) {
+              console.error(`Erro ao criar horário para ${dateString} às ${time}:`, error);
+              // Continue creating other slots even if one fails
+            }
+          }
+        }
+        
+        // Move to next day
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
+      
+      if (createdSlots.length === 0) {
+        return res.status(400).json({ message: "Nenhum horário foi criado. Verifique os dados e tente novamente." });
+      }
+      
+      res.status(201).json({
+        message: `${createdSlots.length} horários criados com sucesso`,
+        count: createdSlots.length,
+        slots: createdSlots
+      });
+    } catch (error) {
+      console.error("Error creating batch time slots:", error);
       res.status(500).json({ message: "Erro interno do servidor", error: error instanceof Error ? error.message : "Unknown error" });
     }
   });

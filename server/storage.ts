@@ -11,7 +11,7 @@ import {
   type TimeSlotWithEmbasa,
   type AppointmentWithDetails
 } from "@shared/schema";
-import { db, client } from "./db";
+import { db, client } from "./db.js";
 import { eq, and } from "drizzle-orm";
 
 export interface IStorage {
